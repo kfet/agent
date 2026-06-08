@@ -1,0 +1,29 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.24 = declared floor in go.mod; 1.26 = latest stable.
+        go: ["1.24", "1.26"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+          cache: true
+      - run: go version
+      # make all runs gofmt + vet + (staticcheck if present) + race +
+      # shuffle + 100% coverage gate.
+      - run: make all
+        env:
+          GOTOOLCHAIN: auto

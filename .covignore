@@ -1,0 +1,6 @@
+# Coverage exclusions — regex patterns matched against lines of the raw
+# `go test -coverprofile` output, applied by covgate before the gate.
+#
+# Convention: file-level patterns only. No line numbers.
+#
+# (none — the module-wide floor in the Makefile carries the gate.)
