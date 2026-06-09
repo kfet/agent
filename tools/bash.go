@@ -31,6 +31,21 @@ type BashToolParams struct {
 // It is a var (not const) so tests can shorten it.
 var DefaultBashTimeout = 10 * time.Second
 
+// newOSPipe isolates the os.Pipe dependency so the (real, fd-exhaustion)
+// failure path can be exercised in tests. os.Pipe fails under EMFILE/ENFILE.
+var newOSPipe = os.Pipe
+
+// processWait isolates (*os.Process).Wait so its non-ExitError failure path
+// (the wait4 syscall can fail with EINTR/ECHILD) can be exercised in tests.
+var processWait = func(p *os.Process) (*os.ProcessState, error) { return p.Wait() }
+
+// drainGracePeriod bounds how long we wait for the output drain to finish
+// after killing the process group before force-closing the read end. Exposed
+// as a var so tests can shrink it to deterministically drive the macOS
+// kernel-race fallback (a backgrounded descendant holding the pipe open past
+// killpg). See the fallback select in executeBash.
+var drainGracePeriod = 50 * time.Millisecond
+
 // NewBashTool creates the bash tool for the given working directory.
 func NewBashTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
@@ -172,7 +187,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Use our own pipe for stdout/stderr so we can drain it after killpg.
-	pr, pw, err := os.Pipe()
+	pr, pw, err := newOSPipe()
 	if err != nil {
 		return agent.AgentToolResult{}, fmt.Errorf("pipe: %w", err)
 	}
@@ -208,7 +223,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	}()
 
 	// Wait for bash itself to exit (does not wait for backgrounded children).
-	state, waitErr := cmd.Process.Wait()
+	state, waitErr := processWait(cmd.Process)
 	close(mainExited)
 
 	// Reap any orphaned children still in the group (backgrounded `&` jobs
@@ -228,7 +243,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	// descendants may still be discarded — that is the documented trade-off.
 	select {
 	case <-drained:
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(drainGracePeriod):
 		_ = pr.Close()
 		<-drained
 	}

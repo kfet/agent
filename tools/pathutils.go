@@ -43,8 +43,11 @@ func tryCurlyQuoteVariant(filePath string) string {
 	return strings.ReplaceAll(filePath, "'", "\u2019")
 }
 
-// fileExists checks if a file exists.
-func fileExists(filePath string) bool {
+// fileExists checks if a file exists. It is a package var so tests can
+// substitute an exact-match implementation — the real os.Stat is normalization-
+// and case-insensitive on macOS/APFS, which would otherwise make the filename-
+// variant fallbacks in ResolveReadPath unreachable on the dev platform.
+var fileExists = func(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return err == nil
 }

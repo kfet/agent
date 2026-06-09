@@ -26,6 +26,15 @@ const (
 	defaultJPEGQual  = 80
 )
 
+// pngEncode and jpegEncode isolate the image encoders so their error-return
+// paths (propagated through encodeBest) can be exercised in tests. bytes.Buffer
+// never errors, so these guards are otherwise unreachable, but the error
+// propagation through encodeBest's signature is real behaviour worth keeping.
+var (
+	pngEncode  = png.Encode
+	jpegEncode = jpeg.Encode
+)
+
 // ResizedImage contains the result of an image resize operation.
 type ResizedImage struct {
 	Data           string // base64
@@ -181,12 +190,12 @@ func resizeToFit(src image.Image, w, h int) image.Image {
 // encodeBest encodes in both PNG and JPEG and returns the smaller result.
 func encodeBest(img image.Image, jpegQuality int) ([]byte, string, error) {
 	var pngBuf bytes.Buffer
-	if err := png.Encode(&pngBuf, img); err != nil {
+	if err := pngEncode(&pngBuf, img); err != nil {
 		return nil, "", fmt.Errorf("png encode: %w", err)
 	}
 
 	var jpegBuf bytes.Buffer
-	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+	if err := jpegEncode(&jpegBuf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return nil, "", fmt.Errorf("jpeg encode: %w", err)
 	}
 

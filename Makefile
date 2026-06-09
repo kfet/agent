@@ -51,17 +51,17 @@ _staticcheck:
 
 # Run unit tests with race + shuffle + fresh cache + a coverage gate.
 #
-# Gate floor is 85% (not 100% like the sibling repos). The agent runtime
-# was extracted from fir, which has NO coverage gate of its own: in-tree,
-# pkg/agent reached high coverage only via fir-side session/mode/e2e tests
-# that did not move with the extraction. Raising this floor toward 100% by
-# adding runtime unit tests for the streaming/retry/tool-error paths is
-# tracked follow-up work (see CHANGELOG). Do not lower it.
+# Gate floor is 100%. The agent runtime was extracted from fir; the
+# streaming/retry/tool-error paths and the tools package are now fully
+# covered by in-repo unit tests. A handful of defensive guards that are
+# unreachable for valid inputs (os.Pipe / StdoutPipe / image encoder
+# failures, process-wait errors) are exercised via small injectable
+# function-var seams rather than deleted. Do not lower this floor.
 #
 run-tests: check
 	@go clean -testcache
 	$(call RUN,tests pass,go test -race -shuffle=on -cover ./... -coverprofile=coverage.tmp.out)
-	$(call RUN,coverage clean,go run github.com/kfet/covgate/cmd/covgate@v0.1.0 -profile=coverage.tmp.out -out=coverage.out -ignore=.covignore -min=85)
+	$(call RUN,coverage clean,go run github.com/kfet/covgate/cmd/covgate@v0.1.0 -profile=coverage.tmp.out -out=coverage.out -ignore=.covignore -min=100)
 	@rm -f coverage.tmp.out
 
 open_coverage:

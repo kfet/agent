@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -18,6 +19,11 @@ import (
 )
 
 const grepDefaultLimit = 100
+
+// stdoutPipe isolates exec.Cmd.StdoutPipe so the (spawn-time IO setup) failure
+// path can be exercised in tests. Same dependency-boundary rationale as the
+// os.Pipe seam in bash.go.
+var stdoutPipe = func(cmd *exec.Cmd) (io.ReadCloser, error) { return cmd.StdoutPipe() }
 
 // GrepToolParams are the parameters for the grep tool.
 type GrepToolParams struct {
@@ -153,7 +159,7 @@ func grepWithRipgrep(ctx context.Context, rgPath, pattern, searchPath string, is
 	args = append(args, pattern, searchPath)
 
 	cmd := exec.CommandContext(ctx, rgPath, args...)
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := stdoutPipe(cmd)
 	if err != nil {
 		return agent.AgentToolResult{}, fmt.Errorf("failed to start ripgrep: %w", err)
 	}

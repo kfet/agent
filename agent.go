@@ -794,13 +794,13 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 		}
 
 		// A fresh context per attempt ensures a failed partial is never
-		// replayed to the model on the next try.
+		// replayed to the model on the next try. streamSinglePrompt always
+		// returns a non-nil message (streamAssistantResponse substitutes an
+		// errorAssistantMessage for every degenerate case), so the only two
+		// outcomes below are "carried an error" and "had content".
 		msg = streamSinglePrompt(ctx, systemPrompt, messages, config, streamFn, onEvent)
 
 		switch {
-		case msg == nil:
-			lastErr = fmt.Errorf("no response from model")
-			forceNoThinking = false
 		case msg.ErrorMessage != "":
 			lastErr = fmt.Errorf("%s", msg.ErrorMessage)
 			// Only transport/stream errors are worth a re-roll; a genuine
@@ -1117,9 +1117,8 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 				}
 
 			case EventToolExecutionStart:
-				if a.state.PendingToolCalls == nil {
-					a.state.PendingToolCalls = make(map[string]bool)
-				}
+				// PendingToolCalls is always initialised (NewAgent, Reset, and
+				// the deferred cleanup below all set it), so no nil guard.
 				a.state.PendingToolCalls[event.ToolCallID] = true
 
 			case EventToolExecutionEnd:
@@ -1145,31 +1144,36 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 
 		// Handle remaining partial message
 		if partial != nil && partial.Role() == "assistant" {
-			am := partial.AsAssistant()
-			if am != nil && len(am.Content) > 0 {
-				hasContent := false
-				for _, c := range am.Content {
-					if c.IsText() && len(c.Text.Text) > 0 {
-						hasContent = true
-						break
-					}
-					if c.IsThinking() && (len(c.Thinking.Thinking) > 0 || c.Thinking.ThinkingSignature != "" || c.Thinking.Redacted) {
-						hasContent = true
-						break
-					}
-					if c.IsToolCall() && len(c.ToolCall.Name) > 0 {
-						hasContent = true
-						break
-					}
-				}
-				if hasContent {
-					a.mu.Lock()
-					a.state.Messages = append(a.state.Messages, *partial)
-					a.mu.Unlock()
-				}
+			if assistantMessageHasContent(partial.AsAssistant()) {
+				a.mu.Lock()
+				a.state.Messages = append(a.state.Messages, *partial)
+				a.mu.Unlock()
 			}
 		}
 	}()
+}
+
+// assistantMessageHasContent reports whether am carries at least one content
+// block worth persisting: a non-empty text block, a thinking block with
+// text/signature/redacted payload, or a named tool call. Used to decide whether
+// a partial assistant message left over after the event stream closed (e.g. an
+// abort or an unclean stream end) should be appended to history.
+func assistantMessageHasContent(am *core.AssistantMessage) bool {
+	if am == nil {
+		return false
+	}
+	for _, c := range am.Content {
+		if c.IsText() && len(c.Text.Text) > 0 {
+			return true
+		}
+		if c.IsThinking() && (len(c.Thinking.Thinking) > 0 || c.Thinking.ThinkingSignature != "" || c.Thinking.Redacted) {
+			return true
+		}
+		if c.IsToolCall() && len(c.ToolCall.Name) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *Agent) emit(e AgentEvent) {
