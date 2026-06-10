@@ -11,7 +11,7 @@ func testModel() *ai.Model {
 	return &ai.Model{
 		ID:            "test-model",
 		Name:          "Test Model",
-		Api:           ai.ApiAnthropicMessages,
+		API:           ai.APIAnthropicMessages,
 		Provider:      ai.ProviderAnthropic,
 		ContextWindow: 200000,
 		MaxTokens:     4096,
@@ -44,7 +44,7 @@ func simpleResponse(text string) *ai.AssistantMessage {
 	return &ai.AssistantMessage{
 		Role:       "assistant",
 		Content:    []ai.AssistantContent{ai.NewTextContent(text)},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonStop,
@@ -63,7 +63,7 @@ func transportError(partialText, errMsg string) *ai.AssistantMessage {
 	return &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      content,
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,

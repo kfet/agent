@@ -163,7 +163,7 @@ func TestSimplePrompt_CtxCancelledDuringRetry(t *testing.T) {
 	empty := &ai.AssistantMessage{
 		Role:       "assistant",
 		Content:    []ai.AssistantContent{},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonStop,

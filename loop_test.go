@@ -16,7 +16,7 @@ func toolCallResponse(toolName, toolID string, args map[string]any) *ai.Assistan
 		Content: []ai.AssistantContent{
 			ai.NewToolCallContent(toolID, toolName, args),
 		},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonToolUse,
@@ -149,7 +149,7 @@ func TestAgentLoop_ErrorResponse(t *testing.T) {
 	errorMsg := &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{},
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,
@@ -246,7 +246,7 @@ func TestAgentLoop_SteeringAfterAllToolCalls(t *testing.T) {
 			ai.NewToolCallContent("call-1", "slow", map[string]any{}),
 			ai.NewToolCallContent("call-2", "slow", map[string]any{}),
 		},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonToolUse,
@@ -469,7 +469,7 @@ func TestAgentLoopContinue_AssistantMessage(t *testing.T) {
 		Messages: []AgentMessage{
 			NewAgentMessage(ai.NewAssistantMsg(ai.AssistantMessage{
 				Content:    []ai.AssistantContent{ai.NewTextContent("hello")},
-				Api:        ai.ApiAnthropicMessages,
+				API:        ai.APIAnthropicMessages,
 				Provider:   ai.ProviderAnthropic,
 				Model:      "test",
 				StopReason: ai.StopReasonStop,
@@ -497,7 +497,7 @@ func TestAgentLoop_FollowUpAfterError(t *testing.T) {
 	errorMsg := &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{},
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,
@@ -577,7 +577,7 @@ func TestAgentLoop_NoFollowUpAfterError(t *testing.T) {
 	errorMsg := &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{},
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,
@@ -628,7 +628,7 @@ func TestAgentLoop_FollowUpHookError(t *testing.T) {
 	errorMsg := &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{},
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,
@@ -672,7 +672,7 @@ func partialToolCallError(toolName string, partialText string) *ai.AssistantMess
 	return &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      content,
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonError,
@@ -1141,7 +1141,7 @@ func TestAgentLoop_AbortedNotResumed(t *testing.T) {
 	aborted := &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{ai.NewTextContent("stopping")},
-		Api:          ai.ApiAnthropicMessages,
+		API:          ai.APIAnthropicMessages,
 		Provider:     ai.ProviderAnthropic,
 		Model:        "test-model",
 		StopReason:   ai.StopReasonAborted,

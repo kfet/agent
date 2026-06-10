@@ -524,7 +524,7 @@ func captureStreamFn(seenModel **ai.Model, seenReasoning *ai.ThinkingLevel, resp
 func TestSimplePrompt_OverrideModel(t *testing.T) {
 	defaultModel := testModel()
 	overrideModel := &ai.Model{
-		ID: "advisor-model", Name: "Advisor", Api: ai.ApiAnthropicMessages,
+		ID: "advisor-model", Name: "Advisor", API: ai.APIAnthropicMessages,
 		Provider: ai.ProviderAnthropic, ContextWindow: 200000, MaxTokens: 4096,
 	}
 
@@ -595,7 +595,7 @@ func TestSimplePrompt_ThinkingOnlyReturnsMarker(t *testing.T) {
 		Content: []ai.AssistantContent{
 			ai.NewThinkingContent("weighed options A and B"),
 		},
-		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		API: ai.APIAnthropicMessages, Provider: ai.ProviderAnthropic,
 		Model: "test-model", StopReason: ai.StopReasonStop,
 	}
 	a := NewAgent(AgentOptions{
@@ -623,7 +623,7 @@ func TestSimplePrompt_ToolCallOnlyReturnsMarker(t *testing.T) {
 		Content: []ai.AssistantContent{
 			ai.NewToolCallContent("toolu_x", "Bash", map[string]any{"command": "ls"}),
 		},
-		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		API: ai.APIAnthropicMessages, Provider: ai.ProviderAnthropic,
 		Model: "test-model", StopReason: ai.StopReasonToolUse,
 	}
 	a := NewAgent(AgentOptions{
@@ -651,7 +651,7 @@ func TestSimplePrompt_MixedContent(t *testing.T) {
 			ai.NewThinkingContent("comparing options"),
 			ai.NewToolCallContent("toolu_y", "Read", map[string]any{"path": "/x"}),
 		},
-		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		API: ai.APIAnthropicMessages, Provider: ai.ProviderAnthropic,
 		Model: "test-model", StopReason: ai.StopReasonToolUse,
 	}
 	a := NewAgent(AgentOptions{
@@ -684,7 +684,7 @@ func TestSimplePrompt_EmptyContentReturnsError(t *testing.T) {
 	resp := &ai.AssistantMessage{
 		Role:       "assistant",
 		Content:    []ai.AssistantContent{},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonStop,
@@ -799,7 +799,7 @@ func thinkingOnlyResponse() *ai.AssistantMessage {
 	return &ai.AssistantMessage{
 		Role:       "assistant",
 		Content:    []ai.AssistantContent{tc},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
 		StopReason: ai.StopReasonStop,

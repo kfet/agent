@@ -51,7 +51,7 @@ func exampleModel() *ai.Model {
 	return &ai.Model{
 		ID:            "example-model",
 		Name:          "Example Model",
-		Api:           ai.ApiAnthropicMessages,
+		API:           ai.APIAnthropicMessages,
 		Provider:      ai.ProviderAnthropic,
 		ContextWindow: 200000,
 		MaxTokens:     4096,
@@ -62,7 +62,7 @@ func textResponse(text string) *ai.AssistantMessage {
 	return &ai.AssistantMessage{
 		Role:       ai.RoleAssistant,
 		Content:    []ai.AssistantContent{ai.NewTextContent(text)},
-		Api:        ai.ApiAnthropicMessages,
+		API:        ai.APIAnthropicMessages,
 		Provider:   ai.ProviderAnthropic,
 		Model:      "example-model",
 		StopReason: ai.StopReasonStop,

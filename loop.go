@@ -572,7 +572,7 @@ func streamAssistantResponse(
 	}
 
 	// Resolve API key
-	apiKey := config.ApiKey
+	apiKey := config.APIKey
 	var apiKeyError string
 	if config.GetAPIKey != nil {
 		if resolved, err := config.GetAPIKey(config.Model.Provider); err == nil && resolved != "" {
@@ -594,8 +594,8 @@ func streamAssistantResponse(
 	}
 	opts := &ai.SimpleStreamOptions{
 		StreamOptions: ai.StreamOptions{
-			ApiKey:          apiKey,
-			ApiKeyError:     apiKeyError,
+			APIKey:          apiKey,
+			APIKeyError:     apiKeyError,
 			Transport:       config.Transport,
 			CacheRetention:  config.CacheRetention,
 			SessionID:       config.SessionID,
@@ -607,7 +607,7 @@ func streamAssistantResponse(
 			Compaction:      config.Compaction,
 			OnPayload:       config.OnPayload,
 			OnRetry:         config.OnRetry,
-			RefreshApiKey:   refreshAPIKey,
+			RefreshAPIKey:   refreshAPIKey,
 		},
 		Reasoning:       config.Reasoning,
 		ThinkingBudgets: config.ThinkingBudgets,
@@ -803,7 +803,7 @@ func errorAssistantMessage(model *ai.Model, msg string) *ai.AssistantMessage {
 	return &ai.AssistantMessage{
 		Role:         "assistant",
 		Content:      []ai.AssistantContent{},
-		Api:          model.Api,
+		API:          model.API,
 		Provider:     model.Provider,
 		Model:        model.ID,
 		StopReason:   ai.StopReasonError,

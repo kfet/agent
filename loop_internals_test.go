@@ -82,7 +82,7 @@ func TestStreamAssistantResponse_ConvertError(t *testing.T) {
 }
 
 // TestStreamAssistantResponse_ApiKeyResolved covers GetAPIKey success (outer)
-// and RefreshApiKey success (closure).
+// and RefreshAPIKey success (closure).
 func TestStreamAssistantResponse_ApiKeyResolved(t *testing.T) {
 	cfg := &AgentLoopConfig{
 		Model:        testModel(),
@@ -90,9 +90,9 @@ func TestStreamAssistantResponse_ApiKeyResolved(t *testing.T) {
 		GetAPIKey:    func(_ string) (string, error) { return "secret", nil },
 	}
 	fn := func(_ *ai.Model, _ ai.Context, opts *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
-		assert.Equal(t, "secret", opts.ApiKey)
-		require.NotNil(t, opts.RefreshApiKey)
-		assert.Equal(t, "secret", opts.RefreshApiKey("anthropic"))
+		assert.Equal(t, "secret", opts.APIKey)
+		require.NotNil(t, opts.RefreshAPIKey)
+		assert.Equal(t, "secret", opts.RefreshAPIKey("anthropic"))
 		return mockStreamFn(simpleResponse("ok"))(nil, ai.Context{}, opts)
 	}
 	msg := runStream(context.Background(), baseCtx(), cfg, fn)
@@ -100,7 +100,7 @@ func TestStreamAssistantResponse_ApiKeyResolved(t *testing.T) {
 }
 
 // TestStreamAssistantResponse_ApiKeyError covers GetAPIKey error (outer) and
-// RefreshApiKey empty-return (closure).
+// RefreshAPIKey empty-return (closure).
 func TestStreamAssistantResponse_ApiKeyError(t *testing.T) {
 	cfg := &AgentLoopConfig{
 		Model:        testModel(),
@@ -108,8 +108,8 @@ func TestStreamAssistantResponse_ApiKeyError(t *testing.T) {
 		GetAPIKey:    func(_ string) (string, error) { return "", fmt.Errorf("no key") },
 	}
 	fn := func(_ *ai.Model, _ ai.Context, opts *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
-		assert.Equal(t, "no key", opts.ApiKeyError)
-		assert.Equal(t, "", opts.RefreshApiKey("anthropic"))
+		assert.Equal(t, "no key", opts.APIKeyError)
+		assert.Equal(t, "", opts.RefreshAPIKey("anthropic"))
 		return mockStreamFn(simpleResponse("ok"))(nil, ai.Context{}, opts)
 	}
 	msg := runStream(context.Background(), baseCtx(), cfg, fn)

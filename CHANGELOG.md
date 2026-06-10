@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-10
+
 ### Breaking
 
 - Consumers must rename any `GetApiKey` field/usage to `GetAPIKey` and
@@ -23,8 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed `GetApiKey` to `GetAPIKey` on `AgentOptions` and
   `AgentLoopConfig` (Go initialism convention; staticcheck ST1003
-  re-enabled). The consumed `kfet/ai` symbols (`Api`, `StreamOptions.ApiKey`)
-  keep their pinned v0.0.1 spelling until a coordinated dependency bump.
+  re-enabled). Bumped the `github.com/kfet/ai` dependency to v0.1.0 and
+  adopted its `API`-initialism rename (`ai.API*` constants, `Model.API`,
+  `StreamOptions.APIKey`/`APIKeyError`/`RefreshAPIKey`) at all call sites.
 - The `core` import alias for `github.com/kfet/ai` is gone; the package
   is imported under its real name `ai` (internal-only change).
 
