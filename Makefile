@@ -54,8 +54,8 @@ _staticcheck:
 # Gate floor is 100%. The agent runtime was extracted from fir; the
 # streaming/retry/tool-error paths and the tools package are now fully
 # covered by in-repo unit tests. A handful of defensive guards that are
-# unreachable for valid inputs (os.Pipe / StdoutPipe / image encoder
-# failures, process-wait errors) are exercised via small injectable
+# unreachable for valid inputs (os.Pipe / StdoutPipe failures,
+# process-wait errors) are exercised via small injectable
 # function-var seams rather than deleted. Do not lower this floor.
 #
 run-tests: check

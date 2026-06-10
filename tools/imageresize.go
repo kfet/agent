@@ -23,17 +23,8 @@ import (
 const (
 	defaultMaxWidth  = 2000
 	defaultMaxHeight = 2000
-	defaultMaxBytes  = 4.5 * 1024 * 1024 // 4.5 MB, below Anthropic's 5MB limit
+	defaultMaxBytes  = 4608 * 1024 // 4.5 MB, below Anthropic's 5MB limit
 	defaultJPEGQual  = 80
-)
-
-// pngEncode and jpegEncode isolate the image encoders so their error-return
-// paths (propagated through encodeBest) can be exercised in tests. bytes.Buffer
-// never errors, so these guards are otherwise unreachable, but the error
-// propagation through encodeBest's signature is real behaviour worth keeping.
-var (
-	pngEncode  = png.Encode
-	jpegEncode = jpeg.Encode
 )
 
 // ResizedImage contains the result of an image resize operation.
@@ -59,7 +50,7 @@ func (o *ResizeImageOptions) withDefaults() ResizeImageOptions {
 	out := ResizeImageOptions{
 		MaxWidth:    defaultMaxWidth,
 		MaxHeight:   defaultMaxHeight,
-		MaxBytes:    int(defaultMaxBytes),
+		MaxBytes:    defaultMaxBytes,
 		JPEGQuality: defaultJPEGQual,
 	}
 	if o != nil {
@@ -138,14 +129,11 @@ func ResizeImage(b64Data, mimeType string, options *ResizeImageOptions) ResizedI
 		resized := resizeToFit(img, w, h)
 
 		for _, quality := range qualitySteps {
-			bestData, bestMime, err := encodeBest(resized, quality)
-			if err != nil {
-				continue
-			}
-			if len(bestData) <= opts.MaxBytes {
+			data, mime, err := encodeBest(resized, quality)
+			if err == nil && len(data) <= opts.MaxBytes {
 				return ResizedImage{
-					Data:           base64.StdEncoding.EncodeToString(bestData),
-					MimeType:       bestMime,
+					Data:           base64.StdEncoding.EncodeToString(data),
+					MimeType:       mime,
 					OriginalWidth:  origW,
 					OriginalHeight: origH,
 					Width:          w,
@@ -156,19 +144,29 @@ func ResizeImage(b64Data, mimeType string, options *ResizeImageOptions) ResizedI
 		}
 	}
 
-	// Last resort: return whatever we got at smallest size
+	// Last resort: return whatever we got at smallest size. If even that
+	// fails to encode (e.g. the scaled dimensions collapsed to zero), return
+	// the original image unchanged rather than empty data.
 	resized := resizeToFit(img, int(math.Round(float64(targetW)*0.25)), int(math.Round(float64(targetH)*0.25)))
-	bestData, bestMime, _ := encodeBest(resized, 40)
-	finalW := resized.Bounds().Dx()
-	finalH := resized.Bounds().Dy()
+	data, mime, err := encodeBest(resized, 40)
+	if err != nil {
+		return ResizedImage{
+			Data:           b64Data,
+			MimeType:       mimeType,
+			OriginalWidth:  origW,
+			OriginalHeight: origH,
+			Width:          origW,
+			Height:         origH,
+		}
+	}
 
 	return ResizedImage{
-		Data:           base64.StdEncoding.EncodeToString(bestData),
-		MimeType:       bestMime,
+		Data:           base64.StdEncoding.EncodeToString(data),
+		MimeType:       mime,
 		OriginalWidth:  origW,
 		OriginalHeight: origH,
-		Width:          finalW,
-		Height:         finalH,
+		Width:          resized.Bounds().Dx(),
+		Height:         resized.Bounds().Dy(),
 		WasResized:     true,
 	}
 }
@@ -183,7 +181,7 @@ func FormatDimensionNote(r ResizedImage) string {
 		r.OriginalWidth, r.OriginalHeight, r.Width, r.Height, scale)
 }
 
-// resizeToFit resizes an image using Lanczos resampling.
+// resizeToFit resizes an image to w×h using Catmull-Rom resampling.
 func resizeToFit(src image.Image, w, h int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
@@ -191,14 +189,16 @@ func resizeToFit(src image.Image, w, h int) image.Image {
 }
 
 // encodeBest encodes in both PNG and JPEG and returns the smaller result.
+// It errors only on degenerate images the encoders reject (e.g. zero-size
+// for PNG, or a dimension over 65535 for JPEG).
 func encodeBest(img image.Image, jpegQuality int) ([]byte, string, error) {
 	var pngBuf bytes.Buffer
-	if err := pngEncode(&pngBuf, img); err != nil {
+	if err := png.Encode(&pngBuf, img); err != nil {
 		return nil, "", fmt.Errorf("png encode: %w", err)
 	}
 
 	var jpegBuf bytes.Buffer
-	if err := jpegEncode(&jpegBuf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return nil, "", fmt.Errorf("jpeg encode: %w", err)
 	}
 

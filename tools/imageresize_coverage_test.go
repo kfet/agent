@@ -3,12 +3,9 @@ package tools
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"image"
 	"image/color"
-	"image/jpeg"
 	"image/png"
-	"io"
 	"math/rand"
 	"testing"
 
@@ -49,34 +46,29 @@ func TestResizeImage_TallImage(t *testing.T) {
 }
 
 func TestEncodeBest_PngEncodeError(t *testing.T) {
-	orig := pngEncode
-	t.Cleanup(func() { pngEncode = orig })
-	pngEncode = func(_ io.Writer, _ image.Image) error { return errors.New("png boom") }
-	_, _, err := encodeBest(image.NewRGBA(image.Rect(0, 0, 4, 4)), 80)
+	// png.Encode rejects zero-size images.
+	_, _, err := encodeBest(image.NewRGBA(image.Rect(0, 0, 0, 0)), 80)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "png encode")
 }
 
 func TestEncodeBest_JpegEncodeError(t *testing.T) {
-	orig := jpegEncode
-	t.Cleanup(func() { jpegEncode = orig })
-	jpegEncode = func(_ io.Writer, _ image.Image, _ *jpeg.Options) error { return errors.New("jpeg boom") }
-	_, _, err := encodeBest(image.NewRGBA(image.Rect(0, 0, 4, 4)), 80)
+	// jpeg.Encode rejects images with a dimension over 65535; png handles it.
+	_, _, err := encodeBest(image.NewRGBA(image.Rect(0, 0, 65536, 1)), 80)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "jpeg encode")
 }
 
-func TestResizeImage_EncodeErrorContinues(t *testing.T) {
-	orig := pngEncode
-	t.Cleanup(func() { pngEncode = orig })
-	pngEncode = func(_ io.Writer, _ image.Image) error { return errors.New("png boom") }
-	// Oversized square image enters the resize loop with both target dims
-	// >= 100; encodeBest errors each iteration -> continue -> last-resort.
-	// Small image + custom limits exercise the same path far faster than
-	// a 2100x2100 image against the 2000px defaults.
-	b64 := encodePNGb64(t, 450, 450, false)
-	res := ResizeImage(b64, "image/png", &ResizeImageOptions{MaxWidth: 400, MaxHeight: 400})
-	require.True(t, res.WasResized)
+func TestResizeImage_LastResortEncodeError_ReturnsOriginal(t *testing.T) {
+	// A 1x2100 image scales to targetW=1; the loop breaks immediately
+	// (w < 100) and the last-resort resize collapses to width 0, which
+	// png.Encode rejects. The original image must come back unchanged.
+	b64 := encodePNGb64(t, 1, 2100, false)
+	res := ResizeImage(b64, "image/png", nil)
+	require.False(t, res.WasResized)
+	require.Equal(t, b64, res.Data)
+	require.Equal(t, 1, res.OriginalWidth)
+	require.Equal(t, 2100, res.OriginalHeight)
 }
 
 func TestEncodeBest_JpegSmallerThanPng(t *testing.T) {
