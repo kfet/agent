@@ -72,8 +72,10 @@ func TestResizeImage_EncodeErrorContinues(t *testing.T) {
 	pngEncode = func(_ io.Writer, _ image.Image) error { return errors.New("png boom") }
 	// Oversized square image enters the resize loop with both target dims
 	// >= 100; encodeBest errors each iteration -> continue -> last-resort.
-	b64 := encodePNGb64(t, 2100, 2100, false)
-	res := ResizeImage(b64, "image/png", nil)
+	// Small image + custom limits exercise the same path far faster than
+	// a 2100x2100 image against the 2000px defaults.
+	b64 := encodePNGb64(t, 450, 450, false)
+	res := ResizeImage(b64, "image/png", &ResizeImageOptions{MaxWidth: 400, MaxHeight: 400})
 	require.True(t, res.WasResized)
 }
 

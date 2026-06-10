@@ -133,9 +133,11 @@ func ResizeImage(b64Data, mimeType string, options *ResizeImageOptions) ResizedI
 			break
 		}
 
-		for _, quality := range qualitySteps {
-			resized := resizeToFit(img, w, h)
+		// The resize depends only on w/h, so do it once per scale step and
+		// only re-encode at decreasing quality.
+		resized := resizeToFit(img, w, h)
 
+		for _, quality := range qualitySteps {
 			bestData, bestMime, err := encodeBest(resized, quality)
 			if err != nil {
 				continue
