@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/utils/image-resize.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (

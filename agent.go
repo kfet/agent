@@ -1,5 +1,6 @@
 // Ported from: packages/agent/src/agent.ts
 // Upstream hash: 036bde0a
+
 package agent
 
 import (
@@ -11,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 // simplePromptRetryBackoffs controls retries of a single-shot SimplePrompt /
@@ -33,8 +34,8 @@ var simplePromptRetryBackoffs = []time.Duration{
 }
 
 // DefaultConvertToLLM keeps only LLM-compatible messages.
-func DefaultConvertToLLM(messages []AgentMessage) ([]core.Message, error) {
-	var out []core.Message
+func DefaultConvertToLLM(messages []AgentMessage) ([]ai.Message, error) {
+	var out []ai.Message
 	for _, m := range messages {
 		role := m.Role()
 		if role == "user" || role == "assistant" || role == "toolResult" {
@@ -48,7 +49,7 @@ func DefaultConvertToLLM(messages []AgentMessage) ([]core.Message, error) {
 type AgentOptions struct {
 	// Model is the LLM model the agent runs on. Convenience field lifted
 	// from AgentState — see InitialState for the precedence rules.
-	Model *core.Model
+	Model *ai.Model
 
 	// SystemPrompt is the agent's system prompt. Convenience field lifted
 	// from AgentState — see InitialState for the precedence rules.
@@ -71,7 +72,7 @@ type AgentOptions struct {
 	// ConvertToLLM converts AgentMessages to LLM Messages before each call.
 	// Defaults to DefaultConvertToLLM (filters to user/assistant/toolResult)
 	// when nil — callers only set this for exotic context shaping.
-	ConvertToLLM func(messages []AgentMessage) ([]core.Message, error)
+	ConvertToLLM func(messages []AgentMessage) ([]ai.Message, error)
 
 	// TransformContext is applied before ConvertToLLM for context pruning etc.
 	TransformContext func(ctx context.Context, messages []AgentMessage) ([]AgentMessage, error)
@@ -82,33 +83,34 @@ type AgentOptions struct {
 	// FollowUpMode: "all" = send all follow-up messages at once, "one-at-a-time" = one per turn.
 	FollowUpMode string
 
-	// StreamFn is a custom stream function. Default uses ai.StreamSimple.
+	// StreamFn is a custom stream function. When nil, the agent falls
+	// back to DefaultStreamFn.
 	StreamFn StreamFn
 
 	// SessionID is forwarded to LLM providers for session-based caching.
 	SessionID string
 
-	// GetApiKey resolves an API key dynamically for each LLM call.
-	GetApiKey func(provider string) (string, error)
+	// GetAPIKey resolves an API key dynamically for each LLM call.
+	GetAPIKey func(provider string) (string, error)
 
 	// ThinkingBudgets sets custom token budgets for thinking levels.
-	ThinkingBudgets *core.ThinkingBudgets
+	ThinkingBudgets *ai.ThinkingBudgets
 
 	// Transport is the preferred transport for providers that support multiple transports.
-	Transport core.Transport
+	Transport ai.Transport
 
 	// MaxRetryDelayMs caps how long to wait for server-requested retries.
 	MaxRetryDelayMs *int
 
 	// ServerTools configures Anthropic server-side tools (web search, code execution, etc.).
-	ServerTools []core.AnthropicServerTool
+	ServerTools []ai.AnthropicServerTool
 
 	// Compaction configures Anthropic server-side context compaction.
-	Compaction *core.AnthropicCompaction
+	Compaction *ai.AnthropicCompaction
 
 	// OnPayload is an optional callback to inspect or replace provider payloads before sending.
 	// Return nil to keep the original payload unchanged.
-	OnPayload func(payload any, model *core.Model) any
+	OnPayload func(payload any, model *ai.Model) any
 
 	// OnRetry is invoked before a retryable pre-stream error is retried.
 	OnRetry func(attempt int, delaySeconds float64, errMsg string)
@@ -123,7 +125,7 @@ type Agent struct {
 	listeners       map[int]func(AgentEvent)
 	nextListenerID  int
 	abortCancel     context.CancelFunc
-	convertToLLM    func([]AgentMessage) ([]core.Message, error)
+	convertToLLM    func([]AgentMessage) ([]ai.Message, error)
 	transformCtx    func(context.Context, []AgentMessage) ([]AgentMessage, error)
 	steeringQueue   []AgentMessage
 	followUpQueue   []AgentMessage
@@ -131,13 +133,13 @@ type Agent struct {
 	followUpMode    string
 	streamFn        StreamFn
 	sessionID       string
-	getApiKey       func(string) (string, error)
-	thinkingBudgets *core.ThinkingBudgets
-	transport       core.Transport
+	getAPIKey       func(string) (string, error)
+	thinkingBudgets *ai.ThinkingBudgets
+	transport       ai.Transport
 	maxRetryDelayMs *int
-	serverTools     []core.AnthropicServerTool
-	compaction      *core.AnthropicCompaction
-	onPayload       func(any, *core.Model) any
+	serverTools     []ai.AnthropicServerTool
+	compaction      *ai.AnthropicCompaction
+	onPayload       func(any, *ai.Model) any
 	onRetry         func(int, float64, string)
 
 	// idleCh is closed when the agent finishes processing. It is never nil:
@@ -226,8 +228,8 @@ func NewAgent(opts AgentOptions) *Agent {
 	if opts.SessionID != "" {
 		a.sessionID = opts.SessionID
 	}
-	if opts.GetApiKey != nil {
-		a.getApiKey = opts.GetApiKey
+	if opts.GetAPIKey != nil {
+		a.getAPIKey = opts.GetAPIKey
 	}
 	if opts.ThinkingBudgets != nil {
 		a.thinkingBudgets = opts.ThinkingBudgets
@@ -235,7 +237,7 @@ func NewAgent(opts AgentOptions) *Agent {
 	if opts.Transport != "" {
 		a.transport = opts.Transport
 	} else {
-		a.transport = core.TransportAuto
+		a.transport = ai.TransportAuto
 	}
 	if opts.MaxRetryDelayMs != nil {
 		a.maxRetryDelayMs = opts.MaxRetryDelayMs
@@ -278,28 +280,28 @@ func (a *Agent) SetSessionID(id string) {
 }
 
 // GetThinkingBudgets returns the current thinking budgets.
-func (a *Agent) GetThinkingBudgets() *core.ThinkingBudgets {
+func (a *Agent) GetThinkingBudgets() *ai.ThinkingBudgets {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.thinkingBudgets
 }
 
 // SetThinkingBudgets sets custom thinking budgets.
-func (a *Agent) SetThinkingBudgets(tb *core.ThinkingBudgets) {
+func (a *Agent) SetThinkingBudgets(tb *ai.ThinkingBudgets) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.thinkingBudgets = tb
 }
 
 // GetTransport returns the current preferred transport.
-func (a *Agent) GetTransport() core.Transport {
+func (a *Agent) GetTransport() ai.Transport {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.transport
 }
 
 // SetTransport sets the preferred transport.
-func (a *Agent) SetTransport(t core.Transport) {
+func (a *Agent) SetTransport(t ai.Transport) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.transport = t
@@ -320,8 +322,8 @@ func (a *Agent) SetMaxRetryDelayMs(ms *int) {
 }
 
 // DefaultStreamFn is consulted when an Agent's per-instance StreamFn is
-// nil. Hosts (typically fir's pkg/session) install a factory here that
-// closes over their provider registry; external consumers of pkg/agent
+// nil. Host applications install a factory here that
+// closes over their provider registry; external consumers of this package
 // either pass StreamFn explicitly or set DefaultStreamFn themselves.
 //
 // The factory receives the call-site context.Context so the closure it
@@ -373,7 +375,7 @@ func (a *Agent) SetSystemPrompt(prompt string) {
 }
 
 // SetModel sets the model.
-func (a *Agent) SetModel(m *core.Model) {
+func (a *Agent) SetModel(m *ai.Model) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.state.Model = m
@@ -415,14 +417,14 @@ func (a *Agent) GetFollowUpMode() string {
 }
 
 // SetServerTools updates the Anthropic server-side tools (web search, code execution, etc.).
-func (a *Agent) SetServerTools(tools []core.AnthropicServerTool) {
+func (a *Agent) SetServerTools(tools []ai.AnthropicServerTool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.serverTools = tools
 }
 
 // SetCompaction updates the Anthropic server-side compaction settings.
-func (a *Agent) SetCompaction(c *core.AnthropicCompaction) {
+func (a *Agent) SetCompaction(c *ai.AnthropicCompaction) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.compaction = c
@@ -594,7 +596,7 @@ func (a *Agent) Reset() {
 // Prompt sends a text prompt to the agent.
 func (a *Agent) Prompt(input string) error {
 	msg := AgentMessage{
-		Message: core.NewUserMsg(input, time.Now().UnixMilli()),
+		Message: ai.NewUserMsg(input, time.Now().UnixMilli()),
 	}
 	return a.PromptMessages([]AgentMessage{msg})
 }
@@ -649,7 +651,7 @@ func (a *Agent) Continue() error {
 		// Queue a synthetic "continue" as a steering message (invisible to the
 		// user) and kick off the loop with an empty prompt so the steering
 		// poll picks it up on the first iteration.
-		continueMsg := NewAgentMessage(core.NewUserMsg("continue", 0))
+		continueMsg := NewAgentMessage(ai.NewUserMsg("continue", 0))
 		a.mu.Lock()
 		a.steeringQueue = append(a.steeringQueue, continueMsg)
 		a.mu.Unlock()
@@ -669,13 +671,13 @@ func (a *Agent) Continue() error {
 type SimplePromptOptions struct {
 	// Model overrides the LLM model used for this call.
 	// When non-nil, the provider is implied by Model.Api and the appropriate
-	// API key is resolved via the agent's GetApiKey for that provider.
-	Model *core.Model
+	// API key is resolved via the agent's GetAPIKey for that provider.
+	Model *ai.Model
 
 	// Reasoning overrides the thinking/reasoning effort.
 	// Empty string ("") inherits the agent's current ThinkingLevel.
-	// Use core.ThinkingOff explicitly to disable thinking for this call.
-	Reasoning core.ThinkingLevel
+	// Use ai.ThinkingOff explicitly to disable thinking for this call.
+	Reasoning ai.ThinkingLevel
 }
 
 // SimplePrompt makes a single-turn LLM call with the given messages.
@@ -716,17 +718,17 @@ func (a *Agent) SimplePrompt(ctx context.Context, messages []AgentMessage, opts 
 //     this function — events never reach AgentSession.checkAutoCompaction.
 //
 // Do not forward these events to the session or add Compaction to the config.
-func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage, opts *SimplePromptOptions, onEvent func(AgentEvent)) (string, *core.AssistantMessage, error) {
+func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage, opts *SimplePromptOptions, onEvent func(AgentEvent)) (string, *ai.AssistantMessage, error) {
 	a.mu.Lock()
 	model := a.state.Model
 	systemPrompt := a.state.SystemPrompt
-	reasoning := core.ThinkingOff
+	reasoning := ai.ThinkingOff
 	if a.state.ThinkingLevel != ThinkingOff {
 		reasoning = ToAIThinkingLevel(a.state.ThinkingLevel)
 	}
 	streamFn := a.streamFn
 	convertToLLM := a.convertToLLM
-	getApiKey := a.getApiKey
+	getAPIKey := a.getAPIKey
 	transport := a.transport
 	sessionID := a.sessionID
 	thinkingBudgets := a.thinkingBudgets
@@ -749,7 +751,7 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 
 	streamFn = resolveStreamFn(ctx, streamFn)
 	if streamFn == nil {
-		return "", nil, fmt.Errorf("no stream function configured: set agent.DefaultStreamFn or pass SimplePromptOptions.StreamFn")
+		return "", nil, fmt.Errorf("no stream function configured: set agent.DefaultStreamFn or AgentOptions.StreamFn")
 	}
 
 	if convertToLLM == nil {
@@ -764,7 +766,7 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 		ThinkingBudgets: thinkingBudgets,
 		MaxRetryDelayMs: maxRetryDelayMs,
 		ConvertToLLM:    convertToLLM,
-		GetApiKey:       getApiKey,
+		GetAPIKey:       getAPIKey,
 	}
 
 	// Single-shot streaming with bounded retry. Unlike the agent loop, this
@@ -781,14 +783,14 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 	baseReasoning := config.Reasoning
 	forceNoThinking := false
 	var (
-		msg     *core.AssistantMessage
+		msg     *ai.AssistantMessage
 		text    string
 		lastErr error
 	)
 	maxAttempts := len(simplePromptRetryBackoffs) + 1
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if forceNoThinking {
-			config.Reasoning = core.ThinkingOff
+			config.Reasoning = ai.ThinkingOff
 		} else {
 			config.Reasoning = baseReasoning
 		}
@@ -805,7 +807,7 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 			lastErr = fmt.Errorf("%s", msg.ErrorMessage)
 			// Only transport/stream errors are worth a re-roll; a genuine
 			// model/API rejection (400, auth, context-length) is terminal.
-			if !core.IsRetryableError(msg.ErrorMessage) {
+			if !ai.IsRetryableError(msg.ErrorMessage) {
 				return "", msg, lastErr
 			}
 			// Transport error — keep the original reasoning level on retry.
@@ -850,7 +852,7 @@ func streamSinglePrompt(
 	config *AgentLoopConfig,
 	streamFn StreamFn,
 	onEvent func(AgentEvent),
-) *core.AssistantMessage {
+) *ai.AssistantMessage {
 	agentCtx := &AgentContext{
 		SystemPrompt: systemPrompt,
 		Messages:     messages,
@@ -887,7 +889,7 @@ type BlockSummary struct {
 // SummarizeBlocks produces a BlockSummary slice for the given content.
 // Exported so session-layer code can attach the same summary to a
 // SideQueryResult on success.
-func SummarizeBlocks(content []core.AssistantContent) []BlockSummary {
+func SummarizeBlocks(content []ai.AssistantContent) []BlockSummary {
 	out := make([]BlockSummary, 0, len(content))
 	for _, c := range content {
 		switch {
@@ -936,7 +938,7 @@ func formatBlockSummary(blocks []BlockSummary) string {
 // thinking, no tool call). The error includes the block summary so callers
 // can distinguish "advisor said nothing" from "advisor only emitted a
 // redacted thinking block" — see SummarizeBlocks for the shape.
-func renderSimplePromptContent(content []core.AssistantContent) (string, []BlockSummary, error) {
+func renderSimplePromptContent(content []ai.AssistantContent) (string, []BlockSummary, error) {
 	blocks := SummarizeBlocks(content)
 	var parts []string
 	for _, c := range content {
@@ -1014,7 +1016,7 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 	a.state.StreamMessage = nil
 	a.state.Error = ""
 
-	var reasoning core.ThinkingLevel
+	var reasoning ai.ThinkingLevel
 	if a.state.ThinkingLevel != ThinkingOff {
 		reasoning = ToAIThinkingLevel(a.state.ThinkingLevel)
 	}
@@ -1054,7 +1056,7 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 		OnRetry:          a.onRetry,
 		ConvertToLLM:     a.convertToLLM,
 		TransformContext: a.transformCtx,
-		GetApiKey:        a.getApiKey,
+		GetAPIKey:        a.getAPIKey,
 		GetSteeringMessages: func() ([]AgentMessage, error) {
 			if skipSteering {
 				skipSteering = false
@@ -1158,7 +1160,7 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 // text/signature/redacted payload, or a named tool call. Used to decide whether
 // a partial assistant message left over after the event stream closed (e.g. an
 // abort or an unclean stream end) should be appended to history.
-func assistantMessageHasContent(am *core.AssistantMessage) bool {
+func assistantMessageHasContent(am *ai.AssistantMessage) bool {
 	if am == nil {
 		return false
 	}

@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/core/tools/bash.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (
@@ -15,7 +16,7 @@ import (
 	"time"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"log/slog"
 )
 
@@ -49,7 +50,7 @@ var drainGracePeriod = 50 * time.Millisecond
 // NewBashTool creates the bash tool for the given working directory.
 func NewBashTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name: "bash",
 			Description: fmt.Sprintf(
 				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. Background processes started with `&` (including under `nohup`) are killed when the foreground command exits, so the tool returns promptly instead of waiting on the inherited pipe. Daemons that detach via `setsid` or double-fork (tmux server, sshd, dockerd, etc.) escape this and keep running.",
@@ -158,7 +159,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 			cwd,
 		)
 		return agent.AgentToolResult{
-			Content: []core.ToolResultContent{{Type: "text", Text: msg}},
+			Content: []ai.ToolResultContent{{Type: "text", Text: msg}},
 			IsError: true,
 		}, nil
 	}
@@ -272,7 +273,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	var fullOutputPath string
 	if truncResult.Truncated {
 		// Write full output to temp file
-		tmpFile, tmpErr := os.CreateTemp("", "fir-bash-*.log")
+		tmpFile, tmpErr := os.CreateTemp("", "agent-bash-*.log")
 		if tmpErr == nil {
 			tmpFile.WriteString(output)
 			tmpFile.Close()
@@ -332,7 +333,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	details["rawOutput"] = rawTrunc.Content
 
 	return agent.AgentToolResult{
-		Content: []core.ToolResultContent{
+		Content: []ai.ToolResultContent{
 			{Type: "text", Text: outputText},
 		},
 		Details: details,

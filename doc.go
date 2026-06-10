@@ -37,9 +37,9 @@
 //
 // The agent does not know how to talk to a specific provider. Callers
 // pass a [StreamFn] — any function that, given a model, prompt context,
-// and options, returns an [core.AssistantMessageEventStream]. When the
+// and options, returns an [github.com/kfet/ai.AssistantMessageEventStream]. When the
 // per-call StreamFn is nil, the agent falls back to [DefaultStreamFn],
-// a package-level factory hook that hosts (such as fir) install to
+// a package-level factory hook that host applications install to
 // wire up their own provider registry. Setting neither yields a clear
 // "no stream function configured" error.
 //
@@ -47,7 +47,7 @@
 //
 // Tools are [AgentTool] values; collect them in a [ToolSet]. Each tool
 // is a name, a JSON schema, an executor, and optional display hints.
-// The standard coding toolbox lives in pkg/agent/tools.
+// The standard coding toolbox lives in [github.com/kfet/agent/tools].
 //
 // # Thinking levels
 //

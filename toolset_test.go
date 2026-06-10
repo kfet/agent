@@ -3,11 +3,11 @@ package agent
 import (
 	"testing"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 func makeTool(name string) AgentTool {
-	return AgentTool{Tool: core.Tool{Name: name, Description: name + " desc"}}
+	return AgentTool{Tool: ai.Tool{Name: name, Description: name + " desc"}}
 }
 
 func TestToolSet_Add_NoDuplicates(t *testing.T) {

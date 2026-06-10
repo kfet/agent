@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ func TestUpdateTools_NilToolsInitializes(t *testing.T) {
 	a.mu.Lock()
 	a.state.Tools = nil
 	a.mu.Unlock()
-	a.UpdateTools(func(ts *ToolSet) { ts.Add(AgentTool{Tool: core.Tool{Name: "x"}}) })
+	a.UpdateTools(func(ts *ToolSet) { ts.Add(AgentTool{Tool: ai.Tool{Name: "x"}}) })
 	assert.True(t, a.State().Tools.Has("x"))
 }
 
@@ -46,11 +46,11 @@ func TestAbort_WithAndWithoutCancel(t *testing.T) {
 // formatBlockSummary (thinking + default), and renderSimplePromptContent
 // (text + thinking + toolCall).
 func TestBlockHelpers(t *testing.T) {
-	content := []core.AssistantContent{
-		core.NewTextContent("hello"),
-		core.NewThinkingContent("pondering"),
-		core.NewToolCallContent("id1", "mytool", map[string]any{"k": "v"}),
-		core.NewServerContent("web_search", json.RawMessage(`{"q":"x"}`), "display"),
+	content := []ai.AssistantContent{
+		ai.NewTextContent("hello"),
+		ai.NewThinkingContent("pondering"),
+		ai.NewToolCallContent("id1", "mytool", map[string]any{"k": "v"}),
+		ai.NewServerContent("web_search", json.RawMessage(`{"q":"x"}`), "display"),
 	}
 
 	blocks := SummarizeBlocks(content)
@@ -96,10 +96,10 @@ func TestContinue_NoMessages(t *testing.T) {
 func TestContinue_LastAssistantWithSteering(t *testing.T) {
 	a := NewAgent(AgentOptions{Model: testModel(), StreamFn: mockStreamFn(simpleResponse("resp"))})
 	a.ReplaceMessages([]AgentMessage{
-		NewAgentMessage(core.NewUserMsg("hi", 0)),
-		NewAgentMessage(core.NewAssistantMsg(*simpleResponse("prev"))),
+		NewAgentMessage(ai.NewUserMsg("hi", 0)),
+		NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("prev"))),
 	})
-	a.Steer(NewAgentMessage(core.NewUserMsg("steer", 0)))
+	a.Steer(NewAgentMessage(ai.NewUserMsg("steer", 0)))
 	require.NoError(t, a.Continue())
 	a.WaitForIdle()
 	assert.False(t, a.State().IsStreaming)
@@ -109,10 +109,10 @@ func TestContinue_LastAssistantWithSteering(t *testing.T) {
 func TestContinue_LastAssistantWithFollowUp(t *testing.T) {
 	a := NewAgent(AgentOptions{Model: testModel(), StreamFn: mockStreamFn(simpleResponse("resp"))})
 	a.ReplaceMessages([]AgentMessage{
-		NewAgentMessage(core.NewUserMsg("hi", 0)),
-		NewAgentMessage(core.NewAssistantMsg(*simpleResponse("prev"))),
+		NewAgentMessage(ai.NewUserMsg("hi", 0)),
+		NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("prev"))),
 	})
-	a.FollowUp(NewAgentMessage(core.NewUserMsg("follow", 0)))
+	a.FollowUp(NewAgentMessage(ai.NewUserMsg("follow", 0)))
 	require.NoError(t, a.Continue())
 	a.WaitForIdle()
 	assert.False(t, a.State().IsStreaming)
@@ -121,7 +121,7 @@ func TestContinue_LastAssistantWithFollowUp(t *testing.T) {
 // TestContinue_LastNotAssistant covers the final runLoop(nil) path.
 func TestContinue_LastNotAssistant(t *testing.T) {
 	a := NewAgent(AgentOptions{Model: testModel(), StreamFn: mockStreamFn(simpleResponse("resp"))})
-	a.ReplaceMessages([]AgentMessage{NewAgentMessage(core.NewUserMsg("hi", 0))})
+	a.ReplaceMessages([]AgentMessage{NewAgentMessage(ai.NewUserMsg("hi", 0))})
 	require.NoError(t, a.Continue())
 	a.WaitForIdle()
 	assert.False(t, a.State().IsStreaming)
@@ -160,13 +160,13 @@ func TestSimplePrompt_NoConvertToLLM(t *testing.T) {
 func TestSimplePrompt_CtxCancelledDuringRetry(t *testing.T) {
 	// Stream returns an assistant message with no usable content -> render
 	// error -> retry path.
-	empty := &core.AssistantMessage{
+	empty := &ai.AssistantMessage{
 		Role:       "assistant",
-		Content:    []core.AssistantContent{},
-		Api:        core.ApiAnthropicMessages,
-		Provider:   core.ProviderAnthropic,
+		Content:    []ai.AssistantContent{},
+		Api:        ai.ApiAnthropicMessages,
+		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
-		StopReason: core.StopReasonStop,
+		StopReason: ai.StopReasonStop,
 		Timestamp:  time.Now().UnixMilli(),
 	}
 	a := NewAgent(AgentOptions{Model: testModel(), StreamFn: mockStreamFn(empty)})
@@ -203,13 +203,13 @@ func TestRunLoop_ThinkingLevelAndToolEvents(t *testing.T) {
 	})
 	a.UpdateTools(func(ts *ToolSet) {
 		ts.Add(AgentTool{
-			Tool: core.Tool{Name: "echo"},
+			Tool: ai.Tool{Name: "echo"},
 			Execute: func(_ context.Context, _ string, params map[string]any, _ AgentToolUpdateCallback) (AgentToolResult, error) {
 				select {
 				case executed <- struct{}{}:
 				default:
 				}
-				return AgentToolResult{Content: []core.ToolResultContent{{Type: core.ContentTypeText, Text: "ok"}}}, nil
+				return AgentToolResult{Content: []ai.ToolResultContent{{Type: ai.ContentTypeText, Text: "ok"}}}, nil
 			},
 		})
 	})
@@ -240,42 +240,42 @@ func TestRunLoop_TurnEndErrorRecorded(t *testing.T) {
 // TestAssistantMessageHasContent covers every content-kind branch of the helper.
 func TestAssistantMessageHasContent(t *testing.T) {
 	assert.False(t, assistantMessageHasContent(nil))
-	assert.False(t, assistantMessageHasContent(&core.AssistantMessage{}))
+	assert.False(t, assistantMessageHasContent(&ai.AssistantMessage{}))
 	// Empty text block -> not content.
-	assert.False(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{core.NewTextContent("")},
+	assert.False(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{ai.NewTextContent("")},
 	}))
 	// Non-empty text.
-	assert.True(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{core.NewTextContent("hi")},
+	assert.True(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{ai.NewTextContent("hi")},
 	}))
 	// Thinking with text.
-	assert.True(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{core.NewThinkingContent("t")},
+	assert.True(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{ai.NewThinkingContent("t")},
 	}))
 	// Thinking with signature only.
-	assert.True(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{{Thinking: &core.ThinkingContent{ThinkingSignature: "sig"}}},
+	assert.True(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{{Thinking: &ai.ThinkingContent{ThinkingSignature: "sig"}}},
 	}))
 	// Thinking redacted only.
-	assert.True(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{{Thinking: &core.ThinkingContent{Redacted: true}}},
+	assert.True(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{{Thinking: &ai.ThinkingContent{Redacted: true}}},
 	}))
 	// Tool call with a name.
-	assert.True(t, assistantMessageHasContent(&core.AssistantMessage{
-		Content: []core.AssistantContent{core.NewToolCallContent("id", "tool", nil)},
+	assert.True(t, assistantMessageHasContent(&ai.AssistantMessage{
+		Content: []ai.AssistantContent{ai.NewToolCallContent("id", "tool", nil)},
 	}))
 }
 
 // partialOnlyStreamFn emits a message start + a delta but no Done event, so the
 // agent loop ends the turn (unclean stream end) without a MessageEnd — leaving
 // a partial assistant message in runLoop for the partial-tail handler.
-func partialOnlyStreamFn(partial *core.AssistantMessage) StreamFn {
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
-		s := core.NewAssistantMessageEventStream()
+func partialOnlyStreamFn(partial *ai.AssistantMessage) StreamFn {
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: partial})
-			s.Push(core.AssistantMessageEvent{Type: core.EventTextDelta, Partial: partial})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: partial})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventTextDelta, Partial: partial})
 			s.End(nil)
 		}()
 		return s
@@ -296,8 +296,8 @@ func TestRunLoop_LeftoverPartialAppended(t *testing.T) {
 // TestRenderSimplePromptContent_MarshalError covers the json.Marshal error
 // fallback for tool-call arguments (a channel is not JSON-serialisable).
 func TestRenderSimplePromptContent_MarshalError(t *testing.T) {
-	content := []core.AssistantContent{
-		core.NewToolCallContent("id", "tool", map[string]any{"bad": make(chan int)}),
+	content := []ai.AssistantContent{
+		ai.NewToolCallContent("id", "tool", map[string]any{"bad": make(chan int)}),
 	}
 	rendered, _, err := renderSimplePromptContent(content)
 	require.NoError(t, err)

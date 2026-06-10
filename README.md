@@ -43,12 +43,7 @@ transitive import graph ever grows beyond that sanctioned set.
 ## Coverage
 
 The repo ships the sibling-convention `make all` (gofmt + vet +
-staticcheck + race + a covgate gate). The gate floor is **85%**, not the
-100% used by the smaller sibling repos: this runtime was extracted from
-fir, which had no coverage gate, so the parts of it exercised only by
-fir-side session/mode/e2e tests did not arrive with a unit test. Pulling
-the floor toward 100% with runtime-level unit tests is tracked follow-up
-work.
+staticcheck + race + a covgate gate). The gate floor is **100%**.
 
 ## Attribution
 

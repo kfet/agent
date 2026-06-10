@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,7 +24,7 @@ func TestToolSet_NilReceivers(t *testing.T) {
 // TestToolSet_RemoveAbsent covers the early return when the name is not present.
 func TestToolSet_RemoveAbsent(t *testing.T) {
 	ts := NewToolSet()
-	ts.Add(AgentTool{Tool: core.Tool{Name: "keep"}})
+	ts.Add(AgentTool{Tool: ai.Tool{Name: "keep"}})
 	ts.Remove("missing") // present-check fails -> early return
 	assert.True(t, ts.Has("keep"))
 	assert.Equal(t, []string{"keep"}, ts.Names())
@@ -33,8 +33,8 @@ func TestToolSet_RemoveAbsent(t *testing.T) {
 // TestToolSet_HasAndNames covers the populated (non-nil) paths.
 func TestToolSet_HasAndNames(t *testing.T) {
 	ts := NewToolSet()
-	ts.Add(AgentTool{Tool: core.Tool{Name: "a"}})
-	ts.Add(AgentTool{Tool: core.Tool{Name: "b"}})
+	ts.Add(AgentTool{Tool: ai.Tool{Name: "a"}})
+	ts.Add(AgentTool{Tool: ai.Tool{Name: "b"}})
 	assert.True(t, ts.Has("a"))
 	assert.False(t, ts.Has("z"))
 	assert.Equal(t, []string{"a", "b"}, ts.Names())
@@ -43,8 +43,8 @@ func TestToolSet_HasAndNames(t *testing.T) {
 // TestAgent_TransportAccessors covers Get/SetTransport.
 func TestAgent_TransportAccessors(t *testing.T) {
 	a := NewAgent(AgentOptions{})
-	a.SetTransport(core.TransportWebSocket)
-	assert.Equal(t, core.TransportWebSocket, a.GetTransport())
+	a.SetTransport(ai.TransportWebSocket)
+	assert.Equal(t, ai.TransportWebSocket, a.GetTransport())
 }
 
 // TestAgent_SetStreamFn covers the per-instance stream function override.
@@ -60,8 +60,8 @@ func TestAgent_SetStreamFn(t *testing.T) {
 // TestAgent_SetServerToolsAndCompaction covers the two Anthropic-specific setters.
 func TestAgent_SetServerToolsAndCompaction(t *testing.T) {
 	a := NewAgent(AgentOptions{})
-	a.SetServerTools([]core.AnthropicServerTool{{}})
-	a.SetCompaction(&core.AnthropicCompaction{})
+	a.SetServerTools([]ai.AnthropicServerTool{{}})
+	a.SetCompaction(&ai.AnthropicCompaction{})
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	assert.Len(t, a.serverTools, 1)
@@ -72,15 +72,15 @@ func TestAgent_SetServerToolsAndCompaction(t *testing.T) {
 // GetAndClearFollowUpQueue.
 func TestAgent_FollowUpQueueClearAndDrain(t *testing.T) {
 	a := NewAgent(AgentOptions{})
-	a.FollowUp(NewAgentMessage(core.NewUserMsg("one", 0)))
-	a.FollowUp(NewAgentMessage(core.NewUserMsg("two", 0)))
+	a.FollowUp(NewAgentMessage(ai.NewUserMsg("one", 0)))
+	a.FollowUp(NewAgentMessage(ai.NewUserMsg("two", 0)))
 
 	drained := a.GetAndClearFollowUpQueue()
 	assert.Len(t, drained, 2)
 	assert.Equal(t, 0, a.FollowUpQueueLen())
 
 	// Clear on an already-empty queue is a no-op.
-	a.FollowUp(NewAgentMessage(core.NewUserMsg("three", 0)))
+	a.FollowUp(NewAgentMessage(ai.NewUserMsg("three", 0)))
 	a.ClearFollowUpQueue()
 	assert.Equal(t, 0, a.FollowUpQueueLen())
 }

@@ -1,8 +1,8 @@
 package tools
 
 // This file re-exports a small set of output-handling primitives from
-// github.com/kfet/pinexec so existing call sites in pkg/agent/tools keep
-// compiling unchanged after pkg/exec was extracted into pinexec.
+// github.com/kfet/pinexec so existing call sites in this package keep
+// compiling unchanged after the shell runner was extracted into pinexec.
 //
 // The primitives (ANSI stripping, env color injection, head/tail
 // truncation) describe how the bash runner's output is shaped, so they

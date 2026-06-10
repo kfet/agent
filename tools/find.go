@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/core/tools/find.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (
@@ -12,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 const findDefaultLimit = 1000
@@ -33,7 +34,7 @@ type FindToolDetails struct {
 // NewFindTool creates the find tool for the given working directory.
 func NewFindTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name: "find",
 			Description: fmt.Sprintf(
 				"Search for files by glob pattern. Returns matching file paths relative to the search directory. "+
@@ -99,7 +100,7 @@ func NewFindTool(cwd string) agent.AgentTool {
 			output = strings.TrimSpace(output)
 			if output == "" {
 				return agent.AgentToolResult{
-					Content: []core.ToolResultContent{
+					Content: []ai.ToolResultContent{
 						{Type: "text", Text: "No files found matching pattern"},
 					},
 				}, nil
@@ -165,7 +166,7 @@ func NewFindTool(cwd string) agent.AgentTool {
 			}
 
 			result := agent.AgentToolResult{
-				Content: []core.ToolResultContent{
+				Content: []ai.ToolResultContent{
 					{Type: "text", Text: resultOutput},
 				},
 			}

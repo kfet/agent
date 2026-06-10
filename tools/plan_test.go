@@ -241,7 +241,7 @@ func TestPlanTool_InvokesPublisherOnEmpty(t *testing.T) {
 
 // TestPlanTool_NilPublisherIsSafe pins the design guarantee that the
 // plan tool functions without a publisher — useful for embedded or
-// non-fir consumers that have no card store.
+// non-UI consumers that have no card store.
 func TestPlanTool_NilPublisherIsSafe(t *testing.T) {
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)

@@ -13,7 +13,7 @@ var CanonicalThinkingLadder = []ThinkingLevel{
 	ThinkingOff,
 }
 
-// ClampThinkingLevel reports whether l is one of the recognised
+// IsCanonicalThinkingLevel reports whether l is one of the recognised
 // thinking levels (off, minimal, low, medium, high, xhigh, max).
 func IsCanonicalThinkingLevel(l ThinkingLevel) bool {
 	for _, c := range CanonicalThinkingLadder {

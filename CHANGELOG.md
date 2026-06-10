@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- Consumers must rename any `GetApiKey` field/usage to `GetAPIKey` and
+  drop any reference to the removed `ToolExecutionMode` API (see below).
+
+### Removed
+
+- The dead `ToolExecutionMode` API (`ToolExecutionSequential`,
+  `ToolExecutionParallel`, and `AgentTool.ExecutionMode`): tool calls
+  have always executed sequentially and the field was never read. It
+  will be reintroduced if/when parallel tool execution is implemented.
+
+### Changed
+
+- Renamed `GetApiKey` to `GetAPIKey` on `AgentOptions` and
+  `AgentLoopConfig` (Go initialism convention; staticcheck ST1003
+  re-enabled). The consumed `kfet/ai` symbols (`Api`, `StreamOptions.ApiKey`)
+  keep their pinned v0.0.1 spelling until a coordinated dependency bump.
+- The `core` import alias for `github.com/kfet/ai` is gone; the package
+  is imported under its real name `ai` (internal-only change).
+
+### Fixed
+
+- README "Coverage" section now states the actual 100% gate floor
+  (was stale 85% rationale).
+- Doc/error strings no longer reference nonexistent symbols
+  (`ai.StreamSimple`, `SimplePromptOptions.StreamFn`); the
+  `IsCanonicalThinkingLevel` godoc names the right function.
+- Added a `tools` package comment (`tools/doc.go`); staticcheck ST1000
+  re-enabled.
+- Comments scrubbed of references to the originating host application.
+
 ## [0.0.2]
 
 ### Changed

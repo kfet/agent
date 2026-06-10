@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/core/tools/write.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (
@@ -9,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"log/slog"
 )
 
@@ -22,7 +23,7 @@ type WriteToolParams struct {
 // NewWriteTool creates the write tool for the given working directory.
 func NewWriteTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name:        "write",
 			Description: "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
 			Parameters: map[string]any{
@@ -75,7 +76,7 @@ func NewWriteTool(cwd string) agent.AgentTool {
 			}
 
 			return agent.AgentToolResult{
-				Content: []core.ToolResultContent{
+				Content: []ai.ToolResultContent{
 					{Type: "text", Text: fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)},
 				},
 			}, nil
@@ -104,7 +105,7 @@ func NewWriteToolWithWriter(cwd string, writeFn WriteFileFn) agent.AgentTool {
 			return agent.AgentToolResult{}, fmt.Errorf("failed to write file %s: %w", path, err)
 		}
 		return agent.AgentToolResult{
-			Content: []core.ToolResultContent{
+			Content: []ai.ToolResultContent{
 				{Type: "text", Text: fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)},
 			},
 		}, nil

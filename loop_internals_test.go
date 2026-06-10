@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ import (
 // runStream calls streamAssistantResponse with an event drainer and returns the
 // final message. Lets white-box tests reach branches the agent-level loop only
 // hits indirectly.
-func runStream(ctx context.Context, agentCtx *AgentContext, cfg *AgentLoopConfig, fn StreamFn) *core.AssistantMessage {
+func runStream(ctx context.Context, agentCtx *AgentContext, cfg *AgentLoopConfig, fn StreamFn) *ai.AssistantMessage {
 	events := make(chan AgentEvent, 256)
 	done := make(chan struct{})
 	go func() {
@@ -31,7 +31,7 @@ func runStream(ctx context.Context, agentCtx *AgentContext, cfg *AgentLoopConfig
 
 func baseCtx() *AgentContext {
 	return &AgentContext{
-		Messages: []AgentMessage{NewAgentMessage(core.NewUserMsg("hi", 0))},
+		Messages: []AgentMessage{NewAgentMessage(ai.NewUserMsg("hi", 0))},
 		Tools:    NewToolSet(),
 	}
 }
@@ -59,7 +59,7 @@ func TestStreamAssistantResponse_TransformOK(t *testing.T) {
 		},
 	}
 	msg := runStream(context.Background(), baseCtx(), cfg, mockStreamFn(simpleResponse("ok")))
-	assert.Equal(t, core.StopReasonStop, msg.StopReason)
+	assert.Equal(t, ai.StopReasonStop, msg.StopReason)
 }
 
 // TestStreamAssistantResponse_ConvertNil covers the nil-ConvertToLLM path.
@@ -73,7 +73,7 @@ func TestStreamAssistantResponse_ConvertNil(t *testing.T) {
 func TestStreamAssistantResponse_ConvertError(t *testing.T) {
 	cfg := &AgentLoopConfig{
 		Model: testModel(),
-		ConvertToLLM: func(_ []AgentMessage) ([]core.Message, error) {
+		ConvertToLLM: func(_ []AgentMessage) ([]ai.Message, error) {
 			return nil, fmt.Errorf("convert boom")
 		},
 	}
@@ -81,48 +81,48 @@ func TestStreamAssistantResponse_ConvertError(t *testing.T) {
 	assert.Contains(t, msg.ErrorMessage, "convert boom")
 }
 
-// TestStreamAssistantResponse_ApiKeyResolved covers GetApiKey success (outer)
+// TestStreamAssistantResponse_ApiKeyResolved covers GetAPIKey success (outer)
 // and RefreshApiKey success (closure).
 func TestStreamAssistantResponse_ApiKeyResolved(t *testing.T) {
 	cfg := &AgentLoopConfig{
 		Model:        testModel(),
 		ConvertToLLM: testConvertToLLM,
-		GetApiKey:    func(_ string) (string, error) { return "secret", nil },
+		GetAPIKey:    func(_ string) (string, error) { return "secret", nil },
 	}
-	fn := func(_ *core.Model, _ core.Context, opts *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	fn := func(_ *ai.Model, _ ai.Context, opts *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		assert.Equal(t, "secret", opts.ApiKey)
 		require.NotNil(t, opts.RefreshApiKey)
 		assert.Equal(t, "secret", opts.RefreshApiKey("anthropic"))
-		return mockStreamFn(simpleResponse("ok"))(nil, core.Context{}, opts)
+		return mockStreamFn(simpleResponse("ok"))(nil, ai.Context{}, opts)
 	}
 	msg := runStream(context.Background(), baseCtx(), cfg, fn)
-	assert.Equal(t, core.StopReasonStop, msg.StopReason)
+	assert.Equal(t, ai.StopReasonStop, msg.StopReason)
 }
 
-// TestStreamAssistantResponse_ApiKeyError covers GetApiKey error (outer) and
+// TestStreamAssistantResponse_ApiKeyError covers GetAPIKey error (outer) and
 // RefreshApiKey empty-return (closure).
 func TestStreamAssistantResponse_ApiKeyError(t *testing.T) {
 	cfg := &AgentLoopConfig{
 		Model:        testModel(),
 		ConvertToLLM: testConvertToLLM,
-		GetApiKey:    func(_ string) (string, error) { return "", fmt.Errorf("no key") },
+		GetAPIKey:    func(_ string) (string, error) { return "", fmt.Errorf("no key") },
 	}
-	fn := func(_ *core.Model, _ core.Context, opts *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	fn := func(_ *ai.Model, _ ai.Context, opts *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		assert.Equal(t, "no key", opts.ApiKeyError)
 		assert.Equal(t, "", opts.RefreshApiKey("anthropic"))
-		return mockStreamFn(simpleResponse("ok"))(nil, core.Context{}, opts)
+		return mockStreamFn(simpleResponse("ok"))(nil, ai.Context{}, opts)
 	}
 	msg := runStream(context.Background(), baseCtx(), cfg, fn)
-	assert.Equal(t, core.StopReasonStop, msg.StopReason)
+	assert.Equal(t, ai.StopReasonStop, msg.StopReason)
 }
 
 // doneOnlyStreamFn emits only an EventDone (no EventStart), so addedPartial is
 // false — covering the non-partial append + MessageStart-emit branches.
-func doneOnlyStreamFn(msg *core.AssistantMessage) StreamFn {
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
-		s := core.NewAssistantMessageEventStream()
+func doneOnlyStreamFn(msg *ai.AssistantMessage) StreamFn {
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -140,10 +140,10 @@ func TestStreamAssistantResponse_NoPartial(t *testing.T) {
 // doneNilResultStreamFn emits an EventDone with no message, so stream.Result()
 // is nil — covering the "stream ended without result" substitution.
 func doneNilResultStreamFn() StreamFn {
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
-		s := core.NewAssistantMessageEventStream()
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone})
 			s.End(nil)
 		}()
 		return s
@@ -160,10 +160,10 @@ func TestStreamAssistantResponse_NilResult(t *testing.T) {
 // deltaOnlyStreamFn emits a delta then ends with no Done event, covering the
 // post-loop fall-through (result == nil -> "stream ended unexpectedly").
 func deltaOnlyStreamFn() StreamFn {
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
-		s := core.NewAssistantMessageEventStream()
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventTextDelta})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventTextDelta})
 			s.End(nil)
 		}()
 		return s
@@ -179,14 +179,14 @@ func TestStreamAssistantResponse_FallThrough(t *testing.T) {
 // TestExecuteToolCalls_Branches covers the nil-Execute, onUpdate-callback, and
 // Execute-error branches of executeToolCalls.
 func TestExecuteToolCalls_Branches(t *testing.T) {
-	assistantMsg := &core.AssistantMessage{Content: []core.AssistantContent{
-		core.NewToolCallContent("id1", "noexec", nil),
-		core.NewToolCallContent("id2", "erroring", nil),
+	assistantMsg := &ai.AssistantMessage{Content: []ai.AssistantContent{
+		ai.NewToolCallContent("id1", "noexec", nil),
+		ai.NewToolCallContent("id2", "erroring", nil),
 	}}
 	ts := NewToolSet()
-	ts.Add(AgentTool{Tool: core.Tool{Name: "noexec"}}) // Execute is nil
+	ts.Add(AgentTool{Tool: ai.Tool{Name: "noexec"}}) // Execute is nil
 	ts.Add(AgentTool{
-		Tool: core.Tool{Name: "erroring"},
+		Tool: ai.Tool{Name: "erroring"},
 		Execute: func(_ context.Context, _ string, _ map[string]any, onUpdate AgentToolUpdateCallback) (AgentToolResult, error) {
 			onUpdate(AgentToolResult{StatusMessage: "working"})
 			return AgentToolResult{}, fmt.Errorf("tool boom")
@@ -216,7 +216,7 @@ func TestRetryMidToolCall_CtxCancelled(t *testing.T) {
 
 	broken := partialToolCallError("Bash", "")
 	agentCtx := &AgentContext{
-		Messages: []AgentMessage{NewAgentMessage(core.NewAssistantMsg(*broken))},
+		Messages: []AgentMessage{NewAgentMessage(ai.NewAssistantMsg(*broken))},
 		Tools:    NewToolSet(),
 	}
 	cfg := &AgentLoopConfig{Model: testModel(), ConvertToLLM: testConvertToLLM}
@@ -240,9 +240,9 @@ func TestRetryMidToolCall_CtxCancelled(t *testing.T) {
 func TestAgentLoop_ShouldStopAfterTurn(t *testing.T) {
 	ts := NewToolSet()
 	ts.Add(AgentTool{
-		Tool: core.Tool{Name: "echo"},
+		Tool: ai.Tool{Name: "echo"},
 		Execute: func(_ context.Context, _ string, _ map[string]any, _ AgentToolUpdateCallback) (AgentToolResult, error) {
-			return AgentToolResult{Content: []core.ToolResultContent{{Type: "text", Text: "ok"}}}, nil
+			return AgentToolResult{Content: []ai.ToolResultContent{{Type: "text", Text: "ok"}}}, nil
 		},
 	})
 	stopped := false
@@ -260,7 +260,7 @@ func TestAgentLoop_ShouldStopAfterTurn(t *testing.T) {
 	events := make(chan AgentEvent, 200)
 	done := make(chan struct{})
 	go func() {
-		AgentLoop(context.Background(), []AgentMessage{NewAgentMessage(core.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
+		AgentLoop(context.Background(), []AgentMessage{NewAgentMessage(ai.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
 		close(events)
 		close(done)
 	}()
@@ -282,7 +282,7 @@ func TestAgentLoop_MidToolCallExhaustedNonUserFollowUp(t *testing.T) {
 
 	delivered := false
 	// A non-user (assistant) follow-up — fold must fail.
-	followUp := NewAgentMessage(core.NewAssistantMsg(*simpleResponse("assistant follow-up")))
+	followUp := NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("assistant follow-up")))
 	cfg := &AgentLoopConfig{
 		Model:        testModel(),
 		ConvertToLLM: testConvertToLLM,
@@ -301,7 +301,7 @@ func TestAgentLoop_MidToolCallExhaustedNonUserFollowUp(t *testing.T) {
 	done := make(chan struct{})
 	var returned []AgentMessage
 	go func() {
-		returned = AgentLoop(context.Background(), []AgentMessage{NewAgentMessage(core.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
+		returned = AgentLoop(context.Background(), []AgentMessage{NewAgentMessage(ai.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
 		close(events)
 		close(done)
 	}()
@@ -322,9 +322,9 @@ func TestAgentLoop_MidToolCallExhaustedNonUserFollowUp(t *testing.T) {
 
 // fallbackOnlyStreamFn ends the stream with a non-nil fallback and no Done
 // event, so the post-loop fall-through returns a non-nil result.
-func fallbackOnlyStreamFn(msg *core.AssistantMessage) StreamFn {
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
-		s := core.NewAssistantMessageEventStream()
+func fallbackOnlyStreamFn(msg *ai.AssistantMessage) StreamFn {
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
+		s := ai.NewAssistantMessageEventStream()
 		go func() { s.End(msg) }()
 		return s
 	}
@@ -356,7 +356,7 @@ func TestAgentLoop_AutoResumeCtxCancelled(t *testing.T) {
 	events := make(chan AgentEvent, 400)
 	done := make(chan struct{})
 	go func() {
-		AgentLoop(ctx, []AgentMessage{NewAgentMessage(core.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
+		AgentLoop(ctx, []AgentMessage{NewAgentMessage(ai.NewUserMsg("go", 0))}, agentCtx, cfg, streamFn, events)
 		close(events)
 		close(done)
 	}()

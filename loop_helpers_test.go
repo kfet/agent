@@ -3,17 +3,17 @@ package agent
 import (
 	"testing"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"github.com/stretchr/testify/assert"
 )
 
-func thinkingResponse(thinking, sig string) *core.AssistantMessage {
-	return &core.AssistantMessage{
+func thinkingResponse(thinking, sig string) *ai.AssistantMessage {
+	return &ai.AssistantMessage{
 		Role: "assistant",
-		Content: []core.AssistantContent{
-			{Thinking: &core.ThinkingContent{Type: "thinking", Thinking: thinking, ThinkingSignature: sig}},
+		Content: []ai.AssistantContent{
+			{Thinking: &ai.ThinkingContent{Type: "thinking", Thinking: thinking, ThinkingSignature: sig}},
 		},
-		StopReason: core.StopReasonError,
+		StopReason: ai.StopReasonError,
 	}
 }
 
@@ -30,18 +30,18 @@ func TestHasReplayableContent_Thinking(t *testing.T) {
 func TestSanitizeTrailingError(t *testing.T) {
 	sanitizeTrailingError(nil) // n == 0, no panic
 
-	withErr := []AgentMessage{NewAgentMessage(core.NewAssistantMsg(*transportError("hi", "boom")))}
+	withErr := []AgentMessage{NewAgentMessage(ai.NewAssistantMsg(*transportError("hi", "boom")))}
 	sanitizeTrailingError(withErr)
 	a := withErr[0].Message.AsAssistant()
-	assert.Equal(t, core.StopReasonStop, a.StopReason)
+	assert.Equal(t, ai.StopReasonStop, a.StopReason)
 	assert.Equal(t, "", a.ErrorMessage)
 
-	clean := []AgentMessage{NewAgentMessage(core.NewAssistantMsg(*simpleResponse("ok")))}
+	clean := []AgentMessage{NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("ok")))}
 	sanitizeTrailingError(clean)
-	assert.Equal(t, core.StopReasonStop, clean[0].Message.AsAssistant().StopReason)
+	assert.Equal(t, ai.StopReasonStop, clean[0].Message.AsAssistant().StopReason)
 
 	// Trailing non-assistant message is a no-op.
-	user := []AgentMessage{NewAgentMessage(core.NewUserMsg("hi", 0))}
+	user := []AgentMessage{NewAgentMessage(ai.NewUserMsg("hi", 0))}
 	sanitizeTrailingError(user)
 	assert.NotNil(t, user[0].Message.AsUser())
 }
@@ -51,12 +51,12 @@ func TestDropTrailingErrorMessage(t *testing.T) {
 	assert.Empty(t, dropTrailingErrorMessage(nil))
 
 	withErr := []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("hi", 0)),
-		NewAgentMessage(core.NewAssistantMsg(*transportError("", "boom"))),
+		NewAgentMessage(ai.NewUserMsg("hi", 0)),
+		NewAgentMessage(ai.NewAssistantMsg(*transportError("", "boom"))),
 	}
 	assert.Len(t, dropTrailingErrorMessage(withErr), 1)
 
-	clean := []AgentMessage{NewAgentMessage(core.NewAssistantMsg(*simpleResponse("ok")))}
+	clean := []AgentMessage{NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("ok")))}
 	assert.Len(t, dropTrailingErrorMessage(clean), 1)
 }
 
@@ -67,13 +67,13 @@ func TestDropTrailingPartial(t *testing.T) {
 	dropTrailingPartial(empty) // n == 0
 
 	partial := &AgentContext{Messages: []AgentMessage{
-		NewAgentMessage(core.NewAssistantMsg(*partialToolCallError("mytool", "thinking..."))),
+		NewAgentMessage(ai.NewAssistantMsg(*partialToolCallError("mytool", "thinking..."))),
 	}}
 	dropTrailingPartial(partial)
 	assert.Empty(t, partial.Messages)
 
 	complete := &AgentContext{Messages: []AgentMessage{
-		NewAgentMessage(core.NewAssistantMsg(*simpleResponse("done"))),
+		NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("done"))),
 	}}
 	dropTrailingPartial(complete)
 	assert.Len(t, complete.Messages, 1)
@@ -93,15 +93,15 @@ func TestFoldStreamErrorNoteIntoFirstUser(t *testing.T) {
 	assert.False(t, foldStreamErrorNoteIntoFirstUser(nil, "note"))
 
 	// First message not user-role.
-	notUser := []AgentMessage{NewAgentMessage(core.NewAssistantMsg(*simpleResponse("x")))}
+	notUser := []AgentMessage{NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("x")))}
 	assert.False(t, foldStreamErrorNoteIntoFirstUser(notUser, "note"))
 
 	// User content is not a plain string.
-	blocks := []AgentMessage{NewAgentMessage(core.NewUserMsg([]any{"block"}, 0))}
+	blocks := []AgentMessage{NewAgentMessage(ai.NewUserMsg([]any{"block"}, 0))}
 	assert.False(t, foldStreamErrorNoteIntoFirstUser(blocks, "note"))
 
 	// Success.
-	ok := []AgentMessage{NewAgentMessage(core.NewUserMsg("original", 7))}
+	ok := []AgentMessage{NewAgentMessage(ai.NewUserMsg("original", 7))}
 	assert.True(t, foldStreamErrorNoteIntoFirstUser(ok, "NOTE"))
 	u := ok[0].Message.AsUser()
 	assert.Equal(t, "NOTE\n\noriginal", u.Content)
@@ -111,7 +111,7 @@ func TestFoldStreamErrorNoteIntoFirstUser(t *testing.T) {
 // TestErrorAssistantMessage covers the constructor.
 func TestErrorAssistantMessage(t *testing.T) {
 	m := errorAssistantMessage(testModel(), "boom")
-	assert.Equal(t, core.StopReasonError, m.StopReason)
+	assert.Equal(t, ai.StopReasonError, m.StopReason)
 	assert.Equal(t, "boom", m.ErrorMessage)
 	assert.Equal(t, testModel().ID, m.Model)
 }

@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/core/tools/edit.ts + edit-diff.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (
@@ -10,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"log/slog"
 )
 
@@ -69,7 +70,7 @@ func applyEditLogic(content, oldText, newText, path string) (editResult, error) 
 // NewEditTool creates the edit (find-and-replace) tool.
 func NewEditTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name:        "edit",
 			Description: "Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.",
 			Parameters: map[string]any{
@@ -139,7 +140,7 @@ func NewEditTool(cwd string) agent.AgentTool {
 			}
 
 			return agent.AgentToolResult{
-				Content: []core.ToolResultContent{
+				Content: []ai.ToolResultContent{
 					{Type: "text", Text: fmt.Sprintf("Successfully replaced text in %s.", path)},
 				},
 				Details: &EditToolDetails{
@@ -180,7 +181,7 @@ func NewEditToolWithReadWriter(cwd string, readFn ReadFileFn, writeFn WriteFileF
 			return agent.AgentToolResult{}, fmt.Errorf("failed to write %s: %w", path, err)
 		}
 		return agent.AgentToolResult{
-			Content: []core.ToolResultContent{
+			Content: []ai.ToolResultContent{
 				{Type: "text", Text: fmt.Sprintf("Successfully replaced text in %s.", path)},
 			},
 			Details: &EditToolDetails{

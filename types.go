@@ -1,34 +1,35 @@
 // Ported from: packages/agent/src/types.ts
 // Upstream hash: 036bde0a
+
 package agent
 
 import (
 	"context"
 	"strings"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 // StreamFn is the function that creates an LLM streaming call.
-type StreamFn func(model *core.Model, ctx core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream
+type StreamFn func(model *ai.Model, ctx ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream
 
 // AgentLoopConfig configures the agent loop.
 type AgentLoopConfig struct {
-	core.SimpleStreamOptions
+	ai.SimpleStreamOptions
 
 	// Model is the LLM model to use.
-	Model *core.Model
+	Model *ai.Model
 
 	// ConvertToLLM converts AgentMessages to LLM-compatible Messages before each call.
-	ConvertToLLM func(messages []AgentMessage) ([]core.Message, error)
+	ConvertToLLM func(messages []AgentMessage) ([]ai.Message, error)
 
 	// TransformContext is an optional transform applied before ConvertToLLM.
 	// Use for context window management, injecting external context, etc.
 	TransformContext func(ctx context.Context, messages []AgentMessage) ([]AgentMessage, error)
 
-	// GetApiKey resolves an API key dynamically for each LLM call.
+	// GetAPIKey resolves an API key dynamically for each LLM call.
 	// Useful for short-lived OAuth tokens that may expire during tool execution.
-	GetApiKey func(provider string) (string, error)
+	GetAPIKey func(provider string) (string, error)
 
 	// GetSteeringMessages returns steering messages to inject mid-run.
 	// Called after the current assistant turn finishes executing its tool calls,
@@ -54,30 +55,30 @@ type AgentLoopConfig struct {
 	GetFollowUpMessages func() ([]AgentMessage, error)
 
 	// Reasoning specifies the thinking/reasoning level.
-	Reasoning core.ThinkingLevel
+	Reasoning ai.ThinkingLevel
 
 	// SessionID is the unique identifier for this session.
 	SessionID string
 
 	// ThinkingBudgets specifies token budgets for thinking.
-	ThinkingBudgets *core.ThinkingBudgets
+	ThinkingBudgets *ai.ThinkingBudgets
 
 	// Transport is the preferred transport for providers that support multiple transports.
-	Transport core.Transport
+	Transport ai.Transport
 
 	// MaxRetryDelayMs is the maximum delay between retries in milliseconds.
 	MaxRetryDelayMs *int
 
 	// ServerTools configures Anthropic server-side tools (web search, code execution, etc.).
 	// Only used when the model provider is Anthropic.
-	ServerTools []core.AnthropicServerTool
+	ServerTools []ai.AnthropicServerTool
 
 	// Compaction configures Anthropic server-side context compaction.
-	Compaction *core.AnthropicCompaction
+	Compaction *ai.AnthropicCompaction
 
 	// OnPayload is an optional callback to inspect or replace provider payloads before sending.
 	// Return nil to keep the original payload unchanged.
-	OnPayload func(payload any, model *core.Model) any
+	OnPayload func(payload any, model *ai.Model) any
 
 	// OnRetry is invoked before a retryable pre-stream error (rate limit /
 	// overloaded / transient 5xx) is retried. Sessions can use this to notify
@@ -85,23 +86,23 @@ type AgentLoopConfig struct {
 	OnRetry func(attempt int, delaySeconds float64, errMsg string)
 }
 
-// ThinkingLevel is an alias for core.ThinkingLevel so all packages use the same type.
-type ThinkingLevel = core.ThinkingLevel
+// ThinkingLevel is an alias for ai.ThinkingLevel so all packages use the same type.
+type ThinkingLevel = ai.ThinkingLevel
 
-// Re-export core.ThinkingLevel constants for convenience.
+// Re-export ai.ThinkingLevel constants for convenience.
 const (
-	ThinkingOff     = core.ThinkingOff
-	ThinkingMinimal = core.ThinkingMinimal
-	ThinkingLow     = core.ThinkingLow
-	ThinkingMedium  = core.ThinkingMedium
-	ThinkingHigh    = core.ThinkingHigh
-	ThinkingXHigh   = core.ThinkingXHigh
-	ThinkingMax     = core.ThinkingMax
+	ThinkingOff     = ai.ThinkingOff
+	ThinkingMinimal = ai.ThinkingMinimal
+	ThinkingLow     = ai.ThinkingLow
+	ThinkingMedium  = ai.ThinkingMedium
+	ThinkingHigh    = ai.ThinkingHigh
+	ThinkingXHigh   = ai.ThinkingXHigh
+	ThinkingMax     = ai.ThinkingMax
 )
 
 // ToAIThinkingLevel converts a ThinkingLevel to the ai-layer value.
 // Returns empty string for "off" (off means no thinking).
-func ToAIThinkingLevel(t ThinkingLevel) core.ThinkingLevel {
+func ToAIThinkingLevel(t ThinkingLevel) ai.ThinkingLevel {
 	if t == ThinkingOff {
 		return ""
 	}
@@ -109,16 +110,16 @@ func ToAIThinkingLevel(t ThinkingLevel) core.ThinkingLevel {
 }
 
 // AgentMessage is a message in the agent's conversation.
-// It wraps an core.Message and can be extended with custom message types.
+// It wraps an ai.Message and can be extended with custom message types.
 type AgentMessage struct {
-	core.Message
+	ai.Message
 	// Custom holds extension-defined message types (e.g., BashExecutionMessage).
 	// When non-nil, the Message field may be empty and Custom determines the role.
 	Custom any `json:"custom,omitempty"`
 }
 
-// NewAgentMessage wraps an core.Message as an AgentMessage.
-func NewAgentMessage(msg core.Message) AgentMessage {
+// NewAgentMessage wraps an ai.Message as an AgentMessage.
+func NewAgentMessage(msg ai.Message) AgentMessage {
 	return AgentMessage{Message: msg}
 }
 
@@ -144,7 +145,7 @@ func (m *AgentMessage) Text() string {
 // AgentState holds the current state of the agent.
 type AgentState struct {
 	SystemPrompt     string
-	Model            *core.Model
+	Model            *ai.Model
 	ThinkingLevel    ThinkingLevel
 	Tools            *ToolSet
 	Messages         []AgentMessage
@@ -157,7 +158,7 @@ type AgentState struct {
 // AgentToolResult is the result of executing a tool.
 type AgentToolResult struct {
 	// Content blocks supporting text and images.
-	Content []core.ToolResultContent
+	Content []ai.ToolResultContent
 	// Details for UI display or logging.
 	Details any
 	// IsError signals that the tool result represents an error,
@@ -177,19 +178,9 @@ type AgentToolResult struct {
 // AgentToolUpdateCallback is called during streaming tool execution.
 type AgentToolUpdateCallback func(partialResult AgentToolResult)
 
-// ToolExecutionMode controls how tool calls are dispatched.
-// - "sequential": tools must execute one at a time with other tool calls.
-// - "parallel":   tools can execute concurrently with other tool calls.
-type ToolExecutionMode string
-
-const (
-	ToolExecutionSequential ToolExecutionMode = "sequential"
-	ToolExecutionParallel   ToolExecutionMode = "parallel"
-)
-
-// AgentTool extends core.Tool with execution capability.
+// AgentTool extends ai.Tool with execution capability.
 type AgentTool struct {
-	core.Tool
+	ai.Tool
 
 	// Label is a human-readable label for UI display.
 	Label string
@@ -197,12 +188,6 @@ type AgentTool struct {
 	// DisplayHint tells the TUI how to format this tool's execution.
 	// Nil means use built-in formatting or the generic fallback.
 	DisplayHint *ToolDisplayHint
-
-	// ExecutionMode is an optional per-tool override of the agent's default
-	// tool execution mode. When set to ToolExecutionSequential, the presence
-	// of this tool in a batch forces the entire batch to execute
-	// sequentially (matching upstream behaviour).
-	ExecutionMode ToolExecutionMode
 
 	// Execute runs the tool. The context can be cancelled for abort.
 	Execute func(
@@ -238,7 +223,7 @@ type TitleArg struct {
 	Label string `json:"label,omitempty"`
 }
 
-// AgentContext is like core.Context but uses AgentTool.
+// AgentContext is like ai.Context but uses AgentTool.
 type AgentContext struct {
 	SystemPrompt string
 	Messages     []AgentMessage
@@ -248,9 +233,9 @@ type AgentContext struct {
 // ShouldStopAfterTurnContext is the context passed to AgentLoopConfig.ShouldStopAfterTurn.
 type ShouldStopAfterTurnContext struct {
 	// Message is the assistant message that completed the turn.
-	Message *core.AssistantMessage
+	Message *ai.AssistantMessage
 	// ToolResults are the tool result messages passed to the preceding turn_end event.
-	ToolResults []core.ToolResultMessage
+	ToolResults []ai.ToolResultMessage
 	// Context is the current agent context after the turn's assistant message
 	// and tool results have been appended.
 	Context AgentContext
@@ -300,13 +285,13 @@ type AgentEvent struct {
 
 	// For turn_end
 	TurnMessage *AgentMessage
-	ToolResults []core.ToolResultMessage
+	ToolResults []ai.ToolResultMessage
 
 	// For message_start, message_update, message_end
 	Message *AgentMessage
 
 	// For message_update
-	AssistantMessageEvent *core.AssistantMessageEvent
+	AssistantMessageEvent *ai.AssistantMessageEvent
 
 	// For tool_execution_start, tool_execution_update, tool_execution_end
 	ToolCallID  string

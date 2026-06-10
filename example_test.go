@@ -1,8 +1,7 @@
 package agent_test
 
-// This file is the second internal consumer of pkg/agent (see
-// docs/design/ai-agent-extraction.md Phase 4). The examples drive the
-// public API with a fake StreamFn — no fir-side imports, no provider
+// The examples in this file drive the
+// public API with a fake StreamFn — no host-side imports, no provider
 // HTTP, no session store. They serve three purposes:
 //
 //  1. Compile-checked usage documentation (visible on pkg.go.dev once
@@ -19,26 +18,26 @@ import (
 	"time"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 // fakeStreamFn returns a StreamFn that replays the given assistant
 // messages, one per call, looping on the last response after the
 // canned list is exhausted.
-func fakeStreamFn(responses ...*core.AssistantMessage) agent.StreamFn {
+func fakeStreamFn(responses ...*ai.AssistantMessage) agent.StreamFn {
 	var mu sync.Mutex
 	idx := 0
-	return func(_ *core.Model, _ core.Context, _ *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	return func(_ *ai.Model, _ ai.Context, _ *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		mu.Lock()
 		msg := responses[idx]
 		if idx < len(responses)-1 {
 			idx++
 		}
 		mu.Unlock()
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: msg})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -48,25 +47,25 @@ func fakeStreamFn(responses ...*core.AssistantMessage) agent.StreamFn {
 // exampleModel returns a Model wired up for Anthropic Messages so the
 // examples compile against a realistic shape. No HTTP is involved —
 // the StreamFn is faked.
-func exampleModel() *core.Model {
-	return &core.Model{
+func exampleModel() *ai.Model {
+	return &ai.Model{
 		ID:            "example-model",
 		Name:          "Example Model",
-		Api:           core.ApiAnthropicMessages,
-		Provider:      core.ProviderAnthropic,
+		Api:           ai.ApiAnthropicMessages,
+		Provider:      ai.ProviderAnthropic,
 		ContextWindow: 200000,
 		MaxTokens:     4096,
 	}
 }
 
-func textResponse(text string) *core.AssistantMessage {
-	return &core.AssistantMessage{
-		Role:       core.RoleAssistant,
-		Content:    []core.AssistantContent{core.NewTextContent(text)},
-		Api:        core.ApiAnthropicMessages,
-		Provider:   core.ProviderAnthropic,
+func textResponse(text string) *ai.AssistantMessage {
+	return &ai.AssistantMessage{
+		Role:       ai.RoleAssistant,
+		Content:    []ai.AssistantContent{ai.NewTextContent(text)},
+		Api:        ai.ApiAnthropicMessages,
+		Provider:   ai.ProviderAnthropic,
 		Model:      "example-model",
-		StopReason: core.StopReasonStop,
+		StopReason: ai.StopReasonStop,
 		Timestamp:  time.Now().UnixMilli(),
 	}
 }
@@ -115,7 +114,7 @@ func ExampleAgent_SimplePrompt() {
 	})
 
 	out, err := a.SimplePrompt(context.Background(), []agent.AgentMessage{
-		{Message: core.NewUserMsg("What is the answer?", time.Now().UnixMilli())},
+		{Message: ai.NewUserMsg("What is the answer?", time.Now().UnixMilli())},
 	}, nil)
 	if err != nil {
 		fmt.Println("simple prompt error:", err)
@@ -145,7 +144,7 @@ func ExampleDefaultStreamFn() {
 	})
 
 	out, _ := a.SimplePrompt(context.Background(), []agent.AgentMessage{
-		{Message: core.NewUserMsg("hi", time.Now().UnixMilli())},
+		{Message: ai.NewUserMsg("hi", time.Now().UnixMilli())},
 	}, nil)
 	fmt.Println(out)
 	// Output: from default

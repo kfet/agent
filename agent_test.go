@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,8 +68,8 @@ func TestAgent_SettersAndGetters(t *testing.T) {
 func TestAgent_MessageOperations(t *testing.T) {
 	a := NewAgent(AgentOptions{})
 
-	msg1 := NewAgentMessage(core.NewUserMsg("hello", 0))
-	msg2 := NewAgentMessage(core.NewUserMsg("world", 0))
+	msg1 := NewAgentMessage(ai.NewUserMsg("hello", 0))
+	msg2 := NewAgentMessage(ai.NewUserMsg("world", 0))
 
 	a.AppendMessage(msg1)
 	a.AppendMessage(msg2)
@@ -89,11 +89,11 @@ func TestAgent_MessageOperations(t *testing.T) {
 func TestAgent_QueueOperations(t *testing.T) {
 	a := NewAgent(AgentOptions{})
 
-	msg := NewAgentMessage(core.NewUserMsg("steering", 0))
+	msg := NewAgentMessage(ai.NewUserMsg("steering", 0))
 	a.Steer(msg)
 	assert.True(t, a.HasQueuedMessages())
 
-	followUp := NewAgentMessage(core.NewUserMsg("follow up", 0))
+	followUp := NewAgentMessage(ai.NewUserMsg("follow up", 0))
 	a.FollowUp(followUp)
 	assert.True(t, a.HasQueuedMessages())
 
@@ -110,8 +110,8 @@ func TestAgent_PeekFollowUpQueue(t *testing.T) {
 	// Empty queue returns empty slice.
 	assert.Empty(t, a.PeekFollowUpQueue())
 
-	m1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	m2 := NewAgentMessage(core.NewUserMsg("second", 0))
+	m1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	m2 := NewAgentMessage(ai.NewUserMsg("second", 0))
 	a.FollowUp(m1)
 	a.FollowUp(m2)
 
@@ -122,7 +122,7 @@ func TestAgent_PeekFollowUpQueue(t *testing.T) {
 	assert.Equal(t, 2, a.FollowUpQueueLen())
 
 	// Mutating the returned slice must not affect the internal queue.
-	snap[0] = NewAgentMessage(core.NewUserMsg("mutated", 0))
+	snap[0] = NewAgentMessage(ai.NewUserMsg("mutated", 0))
 	assert.Equal(t, 2, a.FollowUpQueueLen())
 	fresh := a.PeekFollowUpQueue()
 	assert.Equal(t, "first", fresh[0].Message.AsUser().Content)
@@ -131,9 +131,9 @@ func TestAgent_PeekFollowUpQueue(t *testing.T) {
 func TestAgent_RemoveFollowUp(t *testing.T) {
 	a := NewAgent(AgentOptions{})
 
-	m1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	m2 := NewAgentMessage(core.NewUserMsg("second", 0))
-	m3 := NewAgentMessage(core.NewUserMsg("third", 0))
+	m1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	m2 := NewAgentMessage(ai.NewUserMsg("second", 0))
+	m3 := NewAgentMessage(ai.NewUserMsg("third", 0))
 	a.FollowUp(m1)
 	a.FollowUp(m2)
 	a.FollowUp(m3)
@@ -190,9 +190,9 @@ func TestAgent_Subscribe(t *testing.T) {
 
 func TestAgent_Reset(t *testing.T) {
 	a := NewAgent(AgentOptions{})
-	a.AppendMessage(NewAgentMessage(core.NewUserMsg("hello", 0)))
-	a.Steer(NewAgentMessage(core.NewUserMsg("steer", 0)))
-	a.FollowUp(NewAgentMessage(core.NewUserMsg("follow", 0)))
+	a.AppendMessage(NewAgentMessage(ai.NewUserMsg("hello", 0)))
+	a.Steer(NewAgentMessage(ai.NewUserMsg("steer", 0)))
+	a.FollowUp(NewAgentMessage(ai.NewUserMsg("follow", 0)))
 
 	a.Reset()
 
@@ -238,12 +238,12 @@ func TestAgent_ContinueFromAssistant_NoQueued(t *testing.T) {
 		StreamFn: mockStreamFn(simpleResponse("continued")),
 	})
 
-	assistMsg := core.AssistantMessage{
-		Role:       core.RoleAssistant,
-		Content:    []core.AssistantContent{core.NewTextContent("partial response")},
-		StopReason: core.StopReasonStop,
+	assistMsg := ai.AssistantMessage{
+		Role:       ai.RoleAssistant,
+		Content:    []ai.AssistantContent{ai.NewTextContent("partial response")},
+		StopReason: ai.StopReasonStop,
 	}
-	a.AppendMessage(NewAgentMessage(core.NewAssistantMsg(assistMsg)))
+	a.AppendMessage(NewAgentMessage(ai.NewAssistantMsg(assistMsg)))
 
 	err := a.Continue()
 	assert.NoError(t, err)
@@ -306,7 +306,7 @@ func TestAgent_ThinkingBudgets(t *testing.T) {
 	assert.Nil(t, a.GetThinkingBudgets())
 
 	val := 1000
-	tb := &core.ThinkingBudgets{High: &val}
+	tb := &ai.ThinkingBudgets{High: &val}
 	a.SetThinkingBudgets(tb)
 	assert.Equal(t, tb, a.GetThinkingBudgets())
 }
@@ -324,8 +324,8 @@ func TestAgent_DequeueSteeringOneAtATime(t *testing.T) {
 	a := NewAgent(AgentOptions{})
 	a.SetSteeringMode("one-at-a-time")
 
-	msg1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	msg2 := NewAgentMessage(core.NewUserMsg("second", 0))
+	msg1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	msg2 := NewAgentMessage(ai.NewUserMsg("second", 0))
 	a.Steer(msg1)
 	a.Steer(msg2)
 
@@ -341,8 +341,8 @@ func TestAgent_DequeueSteeringOneAtATime(t *testing.T) {
 func TestAgent_DequeueSteeringAll(t *testing.T) {
 	a := NewAgent(AgentOptions{SteeringMode: "all"})
 
-	msg1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	msg2 := NewAgentMessage(core.NewUserMsg("second", 0))
+	msg1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	msg2 := NewAgentMessage(ai.NewUserMsg("second", 0))
 	a.Steer(msg1)
 	a.Steer(msg2)
 
@@ -355,8 +355,8 @@ func TestAgent_DequeueFollowUpOneAtATime(t *testing.T) {
 	a := NewAgent(AgentOptions{})
 	a.SetFollowUpMode("one-at-a-time")
 
-	msg1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	msg2 := NewAgentMessage(core.NewUserMsg("second", 0))
+	msg1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	msg2 := NewAgentMessage(ai.NewUserMsg("second", 0))
 	a.FollowUp(msg1)
 	a.FollowUp(msg2)
 
@@ -373,8 +373,8 @@ func TestAgent_DequeueFollowUpOneAtATime(t *testing.T) {
 func TestAgent_DequeueFollowUpAll(t *testing.T) {
 	a := NewAgent(AgentOptions{FollowUpMode: "all"})
 
-	msg1 := NewAgentMessage(core.NewUserMsg("first", 0))
-	msg2 := NewAgentMessage(core.NewUserMsg("second", 0))
+	msg1 := NewAgentMessage(ai.NewUserMsg("first", 0))
+	msg2 := NewAgentMessage(ai.NewUserMsg("second", 0))
 	a.FollowUp(msg1)
 	a.FollowUp(msg2)
 
@@ -384,11 +384,11 @@ func TestAgent_DequeueFollowUpAll(t *testing.T) {
 
 func TestDefaultConvertToLLM_Agent(t *testing.T) {
 	messages := []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("hello", 0)),
-		NewAgentMessage(core.NewAssistantMsg(core.AssistantMessage{
-			Role:       core.RoleAssistant,
-			Content:    []core.AssistantContent{core.NewTextContent("hi")},
-			StopReason: core.StopReasonStop,
+		NewAgentMessage(ai.NewUserMsg("hello", 0)),
+		NewAgentMessage(ai.NewAssistantMsg(ai.AssistantMessage{
+			Role:       ai.RoleAssistant,
+			Content:    []ai.AssistantContent{ai.NewTextContent("hi")},
+			StopReason: ai.StopReasonStop,
 		})),
 	}
 
@@ -432,7 +432,7 @@ func TestSimplePrompt_ReturnsText(t *testing.T) {
 	})
 	a.SetModel(testModel())
 
-	msgs := []AgentMessage{NewAgentMessage(core.NewUserMsg("test question", 0))}
+	msgs := []AgentMessage{NewAgentMessage(ai.NewUserMsg("test question", 0))}
 	got, err := a.SimplePrompt(context.Background(), msgs, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -456,10 +456,10 @@ func TestSimplePrompt_ErrorOnNoModel(t *testing.T) {
 }
 
 func TestSimplePrompt_ErrorMessageFromModel(t *testing.T) {
-	errMsg := &core.AssistantMessage{
+	errMsg := &ai.AssistantMessage{
 		Role:         "assistant",
 		ErrorMessage: "rate limit exceeded",
-		StopReason:   core.StopReasonStop,
+		StopReason:   ai.StopReasonStop,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(errMsg),
@@ -485,12 +485,12 @@ func TestSimplePrompt_DoesNotMutateAgentState(t *testing.T) {
 		ConvertToLLM: DefaultConvertToLLM,
 	})
 	a.SetModel(testModel())
-	a.AppendMessage(NewAgentMessage(core.NewUserMsg("existing", 0)))
+	a.AppendMessage(NewAgentMessage(ai.NewUserMsg("existing", 0)))
 
 	before := len(a.State().Messages)
 	msgs := []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("existing", 0)),
-		NewAgentMessage(core.NewUserMsg("side question", 0)),
+		NewAgentMessage(ai.NewUserMsg("existing", 0)),
+		NewAgentMessage(ai.NewUserMsg("side question", 0)),
 	}
 	_, err := a.SimplePrompt(context.Background(), msgs, nil)
 	if err != nil {
@@ -505,16 +505,16 @@ func TestSimplePrompt_DoesNotMutateAgentState(t *testing.T) {
 // captureStreamFn returns a StreamFn that records the model and reasoning
 // it was invoked with. Used to assert SimplePromptOptions overrides take
 // effect without leaking through to the agent's persistent state.
-func captureStreamFn(seenModel **core.Model, seenReasoning *core.ThinkingLevel, response *core.AssistantMessage) StreamFn {
-	return func(model *core.Model, c core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+func captureStreamFn(seenModel **ai.Model, seenReasoning *ai.ThinkingLevel, response *ai.AssistantMessage) StreamFn {
+	return func(model *ai.Model, c ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		*seenModel = model
 		if options != nil {
 			*seenReasoning = options.Reasoning
 		}
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: response})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: response.StopReason, Message: response})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: response})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: response.StopReason, Message: response})
 			s.End(nil)
 		}()
 		return s
@@ -523,13 +523,13 @@ func captureStreamFn(seenModel **core.Model, seenReasoning *core.ThinkingLevel, 
 
 func TestSimplePrompt_OverrideModel(t *testing.T) {
 	defaultModel := testModel()
-	overrideModel := &core.Model{
-		ID: "advisor-model", Name: "Advisor", Api: core.ApiAnthropicMessages,
-		Provider: core.ProviderAnthropic, ContextWindow: 200000, MaxTokens: 4096,
+	overrideModel := &ai.Model{
+		ID: "advisor-model", Name: "Advisor", Api: ai.ApiAnthropicMessages,
+		Provider: ai.ProviderAnthropic, ContextWindow: 200000, MaxTokens: 4096,
 	}
 
-	var seenModel *core.Model
-	var seenReasoning core.ThinkingLevel
+	var seenModel *ai.Model
+	var seenReasoning ai.ThinkingLevel
 	a := NewAgent(AgentOptions{
 		StreamFn:     captureStreamFn(&seenModel, &seenReasoning, simpleResponse("ok")),
 		ConvertToLLM: DefaultConvertToLLM,
@@ -561,8 +561,8 @@ func TestSimplePrompt_OverrideModel(t *testing.T) {
 }
 
 func TestSimplePrompt_OverrideReasoning(t *testing.T) {
-	var seenModel *core.Model
-	var seenReasoning core.ThinkingLevel
+	var seenModel *ai.Model
+	var seenReasoning ai.ThinkingLevel
 	a := NewAgent(AgentOptions{
 		StreamFn:     captureStreamFn(&seenModel, &seenReasoning, simpleResponse("ok")),
 		ConvertToLLM: DefaultConvertToLLM,
@@ -571,12 +571,12 @@ func TestSimplePrompt_OverrideReasoning(t *testing.T) {
 	// Agent's default reasoning is ThinkingOff.
 
 	// With reasoning override → uses overridden level.
-	_, err := a.SimplePrompt(context.Background(), nil, &SimplePromptOptions{Reasoning: core.ThinkingHigh})
+	_, err := a.SimplePrompt(context.Background(), nil, &SimplePromptOptions{Reasoning: ai.ThinkingHigh})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if seenReasoning != core.ThinkingHigh {
-		t.Errorf("expected reasoning %q, got %q", core.ThinkingHigh, seenReasoning)
+	if seenReasoning != ai.ThinkingHigh {
+		t.Errorf("expected reasoning %q, got %q", ai.ThinkingHigh, seenReasoning)
 	}
 
 	// Agent's persistent thinking level must not have been touched.
@@ -590,13 +590,13 @@ func TestSimplePrompt_OverrideReasoning(t *testing.T) {
 // output: the thinking content is surfaced with a [think] marker rather than
 // silently returned as an empty string.
 func TestSimplePrompt_ThinkingOnlyReturnsMarker(t *testing.T) {
-	resp := &core.AssistantMessage{
+	resp := &ai.AssistantMessage{
 		Role: "assistant",
-		Content: []core.AssistantContent{
-			core.NewThinkingContent("weighed options A and B"),
+		Content: []ai.AssistantContent{
+			ai.NewThinkingContent("weighed options A and B"),
 		},
-		Api: core.ApiAnthropicMessages, Provider: core.ProviderAnthropic,
-		Model: "test-model", StopReason: core.StopReasonStop,
+		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		Model: "test-model", StopReason: ai.StopReasonStop,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(resp),
@@ -618,13 +618,13 @@ func TestSimplePrompt_ThinkingOnlyReturnsMarker(t *testing.T) {
 // marker for each call. Useful signal: the advisor wanted to run a tool that
 // SimplePrompt callers can't execute.
 func TestSimplePrompt_ToolCallOnlyReturnsMarker(t *testing.T) {
-	resp := &core.AssistantMessage{
+	resp := &ai.AssistantMessage{
 		Role: "assistant",
-		Content: []core.AssistantContent{
-			core.NewToolCallContent("toolu_x", "Bash", map[string]any{"command": "ls"}),
+		Content: []ai.AssistantContent{
+			ai.NewToolCallContent("toolu_x", "Bash", map[string]any{"command": "ls"}),
 		},
-		Api: core.ApiAnthropicMessages, Provider: core.ProviderAnthropic,
-		Model: "test-model", StopReason: core.StopReasonToolUse,
+		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		Model: "test-model", StopReason: ai.StopReasonToolUse,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(resp),
@@ -644,15 +644,15 @@ func TestSimplePrompt_ToolCallOnlyReturnsMarker(t *testing.T) {
 // TestSimplePrompt_MixedContent verifies text + thinking + tool_use are all
 // surfaced together, in order, with the appropriate markers.
 func TestSimplePrompt_MixedContent(t *testing.T) {
-	resp := &core.AssistantMessage{
+	resp := &ai.AssistantMessage{
 		Role: "assistant",
-		Content: []core.AssistantContent{
-			core.NewTextContent("here's my take."),
-			core.NewThinkingContent("comparing options"),
-			core.NewToolCallContent("toolu_y", "Read", map[string]any{"path": "/x"}),
+		Content: []ai.AssistantContent{
+			ai.NewTextContent("here's my take."),
+			ai.NewThinkingContent("comparing options"),
+			ai.NewToolCallContent("toolu_y", "Read", map[string]any{"path": "/x"}),
 		},
-		Api: core.ApiAnthropicMessages, Provider: core.ProviderAnthropic,
-		Model: "test-model", StopReason: core.StopReasonToolUse,
+		Api: ai.ApiAnthropicMessages, Provider: ai.ProviderAnthropic,
+		Model: "test-model", StopReason: ai.StopReasonToolUse,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(resp),
@@ -681,13 +681,13 @@ func TestSimplePrompt_MixedContent(t *testing.T) {
 // TestSimplePrompt_EmptyContentReturnsError verifies that a response with
 // zero content blocks returns a clear error (rather than an empty string).
 func TestSimplePrompt_EmptyContentReturnsError(t *testing.T) {
-	resp := &core.AssistantMessage{
+	resp := &ai.AssistantMessage{
 		Role:       "assistant",
-		Content:    []core.AssistantContent{},
-		Api:        core.ApiAnthropicMessages,
-		Provider:   core.ProviderAnthropic,
+		Content:    []ai.AssistantContent{},
+		Api:        ai.ApiAnthropicMessages,
+		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
-		StopReason: core.StopReasonStop,
+		StopReason: ai.StopReasonStop,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(resp),
@@ -709,12 +709,12 @@ func TestSimplePrompt_EmptyContentReturnsError(t *testing.T) {
 // block carries the per-block summary inline, so callers (e.g. the aside
 // extension) can classify the failure without parsing the raw message.
 func TestSimplePrompt_EmptyContentErrorIncludesBlockSummary(t *testing.T) {
-	resp := &core.AssistantMessage{
+	resp := &ai.AssistantMessage{
 		Role: "assistant",
-		Content: []core.AssistantContent{
-			{Thinking: &core.ThinkingContent{Thinking: "", ThinkingSignature: "REDACTED_PAYLOAD"}},
+		Content: []ai.AssistantContent{
+			{Thinking: &ai.ThinkingContent{Thinking: "", ThinkingSignature: "REDACTED_PAYLOAD"}},
 		},
-		StopReason: core.StopReasonStop,
+		StopReason: ai.StopReasonStop,
 	}
 	a := NewAgent(AgentOptions{
 		StreamFn:     mockStreamFn(resp),
@@ -793,16 +793,16 @@ func TestSimplePromptStream_ForwardsEventsAndMatchesSimplePrompt(t *testing.T) {
 // thinkingOnlyResponse simulates the degenerate generation that recurs with
 // thinking models on side queries: a thinking block carrying a signature but
 // no thinking text, and no text block — a clean stop with no usable content.
-func thinkingOnlyResponse() *core.AssistantMessage {
-	tc := core.NewThinkingContent("")
+func thinkingOnlyResponse() *ai.AssistantMessage {
+	tc := ai.NewThinkingContent("")
 	tc.Thinking.ThinkingSignature = "sig-1300-chars-abcdefghij"
-	return &core.AssistantMessage{
+	return &ai.AssistantMessage{
 		Role:       "assistant",
-		Content:    []core.AssistantContent{tc},
-		Api:        core.ApiAnthropicMessages,
-		Provider:   core.ProviderAnthropic,
+		Content:    []ai.AssistantContent{tc},
+		Api:        ai.ApiAnthropicMessages,
+		Provider:   ai.ProviderAnthropic,
 		Model:      "test-model",
-		StopReason: core.StopReasonStop,
+		StopReason: ai.StopReasonStop,
 		Timestamp:  time.Now().UnixMilli(),
 	}
 }
@@ -817,7 +817,7 @@ func TestSimplePrompt_RetriesDegenerateThinkingOnly(t *testing.T) {
 	})
 
 	text, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "the real answer", text)
@@ -832,7 +832,7 @@ func TestSimplePrompt_RetriesTransportError(t *testing.T) {
 	})
 
 	text, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "recovered", text)
@@ -842,13 +842,13 @@ func TestSimplePrompt_RetriesTransportError(t *testing.T) {
 // rejection (e.g. 400) is surfaced immediately, without burning retries.
 func TestSimplePrompt_DoesNotRetryGenuineError(t *testing.T) {
 	calls := 0
-	streamFn := func(model *core.Model, ctx core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	streamFn := func(model *ai.Model, ctx ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		calls++
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		msg := transportError("", "400 invalid request: messages.0: too long")
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: msg})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -859,7 +859,7 @@ func TestSimplePrompt_DoesNotRetryGenuineError(t *testing.T) {
 	})
 
 	_, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.Error(t, err)
 	assert.Equal(t, 1, calls, "genuine 400 error must not be retried")
@@ -870,19 +870,19 @@ func TestSimplePrompt_DoesNotRetryGenuineError(t *testing.T) {
 // OFF so the model is structurally required to emit text. The first attempt
 // uses the configured reasoning level; the retry uses ThinkingOff.
 func TestSimplePrompt_DisablesThinkingOnNoContentRetry(t *testing.T) {
-	var reasonings []core.ThinkingLevel
-	responses := []*core.AssistantMessage{thinkingOnlyResponse(), simpleResponse("answer")}
+	var reasonings []ai.ThinkingLevel
+	responses := []*ai.AssistantMessage{thinkingOnlyResponse(), simpleResponse("answer")}
 	idx := 0
-	streamFn := func(model *core.Model, ctx core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	streamFn := func(model *ai.Model, ctx ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		reasonings = append(reasonings, options.Reasoning)
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		msg := responses[idx]
 		if idx < len(responses)-1 {
 			idx++
 		}
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: msg})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -893,31 +893,31 @@ func TestSimplePrompt_DisablesThinkingOnNoContentRetry(t *testing.T) {
 	})
 
 	text, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "answer", text)
 	require.Len(t, reasonings, 2)
-	assert.Equal(t, core.ThinkingMedium, reasonings[0], "first attempt keeps configured reasoning")
-	assert.Equal(t, core.ThinkingOff, reasonings[1], "no-content retry forces thinking off")
+	assert.Equal(t, ai.ThinkingMedium, reasonings[0], "first attempt keeps configured reasoning")
+	assert.Equal(t, ai.ThinkingOff, reasonings[1], "no-content retry forces thinking off")
 }
 
 // TestSimplePrompt_KeepsReasoningOnTransportRetry verifies that a transport
 // error retry does NOT disable thinking (only no-content results do).
 func TestSimplePrompt_KeepsReasoningOnTransportRetry(t *testing.T) {
-	var reasonings []core.ThinkingLevel
-	responses := []*core.AssistantMessage{transportError("", connResetErr), simpleResponse("ok")}
+	var reasonings []ai.ThinkingLevel
+	responses := []*ai.AssistantMessage{transportError("", connResetErr), simpleResponse("ok")}
 	idx := 0
-	streamFn := func(model *core.Model, ctx core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	streamFn := func(model *ai.Model, ctx ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		reasonings = append(reasonings, options.Reasoning)
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		msg := responses[idx]
 		if idx < len(responses)-1 {
 			idx++
 		}
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: msg})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -928,12 +928,12 @@ func TestSimplePrompt_KeepsReasoningOnTransportRetry(t *testing.T) {
 	})
 
 	_, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.NoError(t, err)
 	require.Len(t, reasonings, 2)
-	assert.Equal(t, core.ThinkingMedium, reasonings[0])
-	assert.Equal(t, core.ThinkingMedium, reasonings[1], "transport retry keeps configured reasoning")
+	assert.Equal(t, ai.ThinkingMedium, reasonings[0])
+	assert.Equal(t, ai.ThinkingMedium, reasonings[1], "transport retry keeps configured reasoning")
 }
 
 // TestSimplePrompt_ExhaustsRetriesThenErrors verifies the retry cap: a
@@ -941,13 +941,13 @@ func TestSimplePrompt_KeepsReasoningOnTransportRetry(t *testing.T) {
 // looping forever.
 func TestSimplePrompt_ExhaustsRetriesThenErrors(t *testing.T) {
 	calls := 0
-	streamFn := func(model *core.Model, ctx core.Context, options *core.SimpleStreamOptions) *core.AssistantMessageEventStream {
+	streamFn := func(model *ai.Model, ctx ai.Context, options *ai.SimpleStreamOptions) *ai.AssistantMessageEventStream {
 		calls++
-		s := core.NewAssistantMessageEventStream()
+		s := ai.NewAssistantMessageEventStream()
 		msg := thinkingOnlyResponse()
 		go func() {
-			s.Push(core.AssistantMessageEvent{Type: core.EventStart, Partial: msg})
-			s.Push(core.AssistantMessageEvent{Type: core.EventDone, Reason: msg.StopReason, Message: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventStart, Partial: msg})
+			s.Push(ai.AssistantMessageEvent{Type: ai.EventDone, Reason: msg.StopReason, Message: msg})
 			s.End(nil)
 		}()
 		return s
@@ -958,7 +958,7 @@ func TestSimplePrompt_ExhaustsRetriesThenErrors(t *testing.T) {
 	})
 
 	_, err := a.SimplePrompt(context.Background(), []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("advise me", time.Now().UnixMilli())),
+		NewAgentMessage(ai.NewUserMsg("advise me", time.Now().UnixMilli())),
 	}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no usable content")
@@ -996,7 +996,7 @@ func TestNewAgent_InitialStateWinsOverLifted(t *testing.T) {
 			SystemPrompt:  "restored prompt",
 			ThinkingLevel: ThinkingHigh,
 			Tools:         NewToolSet(),
-			Messages:      []AgentMessage{NewAgentMessage(core.NewUserMsg("restored", 0))},
+			Messages:      []AgentMessage{NewAgentMessage(ai.NewUserMsg("restored", 0))},
 		},
 	})
 
@@ -1012,8 +1012,8 @@ func TestNewAgent_DefaultsConvertToLLM(t *testing.T) {
 	require.NotNil(t, a.convertToLLM)
 
 	msgs := []AgentMessage{
-		NewAgentMessage(core.NewUserMsg("hi", 0)),
-		NewAgentMessage(core.NewAssistantMsg(*simpleResponse("yo"))),
+		NewAgentMessage(ai.NewUserMsg("hi", 0)),
+		NewAgentMessage(ai.NewAssistantMsg(*simpleResponse("yo"))),
 	}
 	out, err := a.convertToLLM(msgs)
 	require.NoError(t, err)
@@ -1053,38 +1053,38 @@ func TestAgent_IdleChan_ComposesWithSelect(t *testing.T) {
 
 func TestAgentMessage_Text(t *testing.T) {
 	// Assistant message with multiple text blocks concatenates them.
-	am := AgentMessage{Message: core.NewAssistantMsg(core.AssistantMessage{
-		Role: core.RoleAssistant,
-		Content: []core.AssistantContent{
-			core.NewTextContent("Hello, "),
-			core.NewTextContent("world."),
+	am := AgentMessage{Message: ai.NewAssistantMsg(ai.AssistantMessage{
+		Role: ai.RoleAssistant,
+		Content: []ai.AssistantContent{
+			ai.NewTextContent("Hello, "),
+			ai.NewTextContent("world."),
 		},
 	})}
 	assert.Equal(t, "Hello, world.", am.Text())
 
 	// Non-assistant message returns "".
-	user := NewAgentMessage(core.NewUserMsg("hi", 0))
+	user := NewAgentMessage(ai.NewUserMsg("hi", 0))
 	assert.Equal(t, "", user.Text())
 }
 
 func TestNewAgent_AllOptionsSet(t *testing.T) {
 	delay := 1000
-	budgets := &core.ThinkingBudgets{}
+	budgets := &ai.ThinkingBudgets{}
 	a := NewAgent(AgentOptions{
 		Model:            testModel(),
-		ConvertToLLM:     func(m []AgentMessage) ([]core.Message, error) { return nil, nil },
+		ConvertToLLM:     func(m []AgentMessage) ([]ai.Message, error) { return nil, nil },
 		TransformContext: func(ctx context.Context, m []AgentMessage) ([]AgentMessage, error) { return m, nil },
 		SteeringMode:     "all",
 		FollowUpMode:     "all",
 		StreamFn:         mockStreamFn(simpleResponse("x")),
 		SessionID:        "sid",
-		GetApiKey:        func(string) (string, error) { return "k", nil },
+		GetAPIKey:        func(string) (string, error) { return "k", nil },
 		ThinkingBudgets:  budgets,
-		Transport:        core.TransportAuto,
+		Transport:        ai.TransportAuto,
 		MaxRetryDelayMs:  &delay,
-		ServerTools:      []core.AnthropicServerTool{{}},
-		Compaction:       &core.AnthropicCompaction{},
-		OnPayload:        func(p any, m *core.Model) any { return nil },
+		ServerTools:      []ai.AnthropicServerTool{{}},
+		Compaction:       &ai.AnthropicCompaction{},
+		OnPayload:        func(p any, m *ai.Model) any { return nil },
 		OnRetry:          func(int, float64, string) {},
 	})
 	require.NotNil(t, a)
@@ -1092,7 +1092,7 @@ func TestNewAgent_AllOptionsSet(t *testing.T) {
 	assert.Equal(t, &delay, a.GetMaxRetryDelayMs())
 	assert.NotNil(t, a.onPayload)
 	assert.NotNil(t, a.onRetry)
-	assert.NotNil(t, a.getApiKey)
+	assert.NotNil(t, a.getAPIKey)
 	assert.NotNil(t, a.transformCtx)
 	assert.NotNil(t, a.compaction)
 	assert.Len(t, a.serverTools, 1)

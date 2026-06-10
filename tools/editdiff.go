@@ -3,6 +3,7 @@
 //
 // This file contains diff generation and exported aliases for the
 // edit-diff helpers (unexported originals live in edit.go).
+
 package tools
 
 import (

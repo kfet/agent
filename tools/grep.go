@@ -1,5 +1,6 @@
 // Ported from: packages/coding-agent/src/core/tools/grep.ts
 // Upstream hash: 1caadb2e
+
 package tools
 
 import (
@@ -15,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 const grepDefaultLimit = 100
@@ -46,7 +47,7 @@ type GrepToolDetails struct {
 // NewGrepTool creates the grep tool for the given working directory.
 func NewGrepTool(cwd string) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name: "grep",
 			Description: fmt.Sprintf(
 				"Search file contents for a pattern. Returns matching lines with file paths and line numbers. "+
@@ -223,7 +224,7 @@ func grepWithRipgrep(ctx context.Context, rgPath, pattern, searchPath string, is
 
 	if matchCount == 0 {
 		return agent.AgentToolResult{
-			Content: []core.ToolResultContent{
+			Content: []ai.ToolResultContent{
 				{Type: "text", Text: "No matches found"},
 			},
 		}, nil
@@ -327,7 +328,7 @@ func grepWithRipgrep(ctx context.Context, rgPath, pattern, searchPath string, is
 	}
 
 	result := agent.AgentToolResult{
-		Content: []core.ToolResultContent{
+		Content: []ai.ToolResultContent{
 			{Type: "text", Text: output},
 		},
 	}
@@ -359,7 +360,7 @@ func grepFallback(ctx context.Context, pattern, searchPath string, isDirectory, 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
 			return agent.AgentToolResult{
-				Content: []core.ToolResultContent{
+				Content: []ai.ToolResultContent{
 					{Type: "text", Text: "No matches found"},
 				},
 			}, nil
@@ -370,7 +371,7 @@ func grepFallback(ctx context.Context, pattern, searchPath string, isDirectory, 
 	output := strings.TrimSpace(string(out))
 	if output == "" {
 		return agent.AgentToolResult{
-			Content: []core.ToolResultContent{
+			Content: []ai.ToolResultContent{
 				{Type: "text", Text: "No matches found"},
 			},
 		}, nil
@@ -408,7 +409,7 @@ func grepFallback(ctx context.Context, pattern, searchPath string, isDirectory, 
 	}
 
 	return agent.AgentToolResult{
-		Content: []core.ToolResultContent{
+		Content: []ai.ToolResultContent{
 			{Type: "text", Text: resultOutput},
 		},
 	}, nil

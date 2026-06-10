@@ -5,20 +5,20 @@ import (
 	"fmt"
 
 	"github.com/kfet/agent"
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 // PlanSink is the minimal interface the plan tool needs from a session:
 // a place to commit the updated plan. Implementations live outside
-// pkg/agent/tools (typically in the host session package).
+// this package (typically in the host session package).
 type PlanSink interface {
 	UpdatePlan(title string, entries []agent.PlanEntry, metadata map[string]string)
 }
 
 // CardPublisher is an optional callback invoked on every successful
-// plan mutation. Host code may use it to render a fir-style observable
-// "plan/active" card (see docs/design/observable-cards.md) — the plan
-// tool itself stays free of that dependency.
+// plan mutation. Host code may use it to render the current plan in its
+// own UI (status bar, observable card, etc.) — the plan tool itself
+// stays free of that dependency.
 //
 // May be nil; the plan tool is silent when no publisher is provided.
 type CardPublisher func(title string, entries []agent.PlanEntry, metadata map[string]string, entryID string)
@@ -31,7 +31,7 @@ type CardPublisher func(title string, entries []agent.PlanEntry, metadata map[st
 //     the plan state into a card store, status bar, telemetry sink, etc.
 func NewPlanTool(sink PlanSink, publisher CardPublisher) agent.AgentTool {
 	return agent.AgentTool{
-		Tool: core.Tool{
+		Tool: ai.Tool{
 			Name: "plan",
 			Description: "Create or update a plan for tracking task progress. " +
 				"You MUST create a plan before starting any task that involves 3 or more non-trivial steps. " +
@@ -93,7 +93,7 @@ func NewPlanTool(sink PlanSink, publisher CardPublisher) agent.AgentTool {
 			entries, err := parsePlanEntries(params)
 			if err != nil {
 				return agent.AgentToolResult{
-					Content: []core.ToolResultContent{{Type: "text", Text: err.Error()}},
+					Content: []ai.ToolResultContent{{Type: "text", Text: err.Error()}},
 					IsError: true,
 				}, nil
 			}
@@ -115,7 +115,7 @@ func NewPlanTool(sink PlanSink, publisher CardPublisher) agent.AgentTool {
 			}
 
 			return agent.AgentToolResult{
-				Content: []core.ToolResultContent{{Type: "text", Text: msg}},
+				Content: []ai.ToolResultContent{{Type: "text", Text: msg}},
 			}, nil
 		},
 	}

@@ -1,5 +1,6 @@
 // Ported from: packages/agent/src/agent-loop.ts
 // Upstream hash: 036bde0a
+
 package agent
 
 import (
@@ -9,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	core "github.com/kfet/ai"
+	"github.com/kfet/ai"
 )
 
 // AutoResumeMarker is the single-symbol user message the agent loop injects to
 // auto-resume an assistant turn that was killed by a transport/stream error
 // (e.g. "connection reset by peer" mid-stream) rather than a clean stop or tool
-// call. The "play" triangle is an unambiguous, documented signal that fir
-// resumed the turn automatically — NOT real human input — mapping onto the
+// call. The "play" triangle is an unambiguous, documented signal that the
+// agent resumed the turn automatically — NOT real human input — mapping onto the
 // situation: the turn was paused by the reset, and this presses play to resume
 // it. U+25B6 (no variation selector) is a single code point that renders
 // reliably across terminals, log files, and JSON transcripts.
@@ -42,7 +43,7 @@ func isResumableStreamError(errMsg string) bool {
 	if strings.TrimSpace(errMsg) == "" {
 		return false
 	}
-	if core.IsTransientNetworkError(errMsg) {
+	if ai.IsTransientNetworkError(errMsg) {
 		return true
 	}
 	// Stream truncation guards emitted by the providers / agent loop itself
@@ -58,7 +59,7 @@ func isResumableStreamError(errMsg string) bool {
 // one non-empty text block or a thinking block with content/signature. Used to
 // decide whether an auto-resume can keep the emitted prefix (and append the
 // AutoResumeMarker, preserving role alternation) or must drop it and retry.
-func hasReplayableContent(m *core.AssistantMessage) bool {
+func hasReplayableContent(m *ai.AssistantMessage) bool {
 	if m == nil {
 		return false
 	}
@@ -84,8 +85,8 @@ func sanitizeTrailingError(msgs []AgentMessage) {
 	if n == 0 {
 		return
 	}
-	if a := msgs[n-1].Message.AsAssistant(); a != nil && a.StopReason == core.StopReasonError {
-		a.StopReason = core.StopReasonStop
+	if a := msgs[n-1].Message.AsAssistant(); a != nil && a.StopReason == ai.StopReasonError {
+		a.StopReason = ai.StopReasonStop
 		a.ErrorMessage = ""
 	}
 }
@@ -98,7 +99,7 @@ func dropTrailingErrorMessage(msgs []AgentMessage) []AgentMessage {
 	if n == 0 {
 		return msgs
 	}
-	if a := msgs[n-1].Message.AsAssistant(); a != nil && a.StopReason == core.StopReasonError {
+	if a := msgs[n-1].Message.AsAssistant(); a != nil && a.StopReason == ai.StopReasonError {
 		return msgs[:n-1]
 	}
 	return msgs
@@ -241,7 +242,7 @@ func runLoop(
 						// through and inject as standalone, then queue.
 					}
 
-					note := NewAgentMessage(core.NewUserMsg(noteText, time.Now().UnixMilli()))
+					note := NewAgentMessage(ai.NewUserMsg(noteText, time.Now().UnixMilli()))
 					currentCtx.Messages = append(currentCtx.Messages, note)
 					newMessages = append(newMessages, note)
 					events <- AgentEvent{Type: EventMessageStart, Message: &note}
@@ -258,9 +259,9 @@ func runLoop(
 				}
 			}
 
-			newMessages = append(newMessages, NewAgentMessage(core.NewAssistantMsg(*message)))
+			newMessages = append(newMessages, NewAgentMessage(ai.NewAssistantMsg(*message)))
 
-			if message.StopReason == core.StopReasonError || message.StopReason == core.StopReasonAborted {
+			if message.StopReason == ai.StopReasonError || message.StopReason == ai.StopReasonAborted {
 				// Auto-resume on transient transport/stream errors (connection
 				// reset, broken pipe, unexpected EOF, truncated stream, …). A
 				// genuine model/API rejection (400, auth, context-length) or a
@@ -268,7 +269,7 @@ func runLoop(
 				// normal "end the turn" behaviour below. Bounded by
 				// len(autoResumeBackoffs) with backoff so a dead network can't
 				// loop forever.
-				if message.StopReason == core.StopReasonError &&
+				if message.StopReason == ai.StopReasonError &&
 					autoResumeCount < len(autoResumeBackoffs) &&
 					isResumableStreamError(message.ErrorMessage) {
 
@@ -292,7 +293,7 @@ func runLoop(
 							// model continues cleanly from where it left off.
 							sanitizeTrailingError(currentCtx.Messages)
 							sanitizeTrailingError(newMessages)
-							marker := NewAgentMessage(core.NewUserMsg(AutoResumeMarker, time.Now().UnixMilli()))
+							marker := NewAgentMessage(ai.NewUserMsg(AutoResumeMarker, time.Now().UnixMilli()))
 							pendingMessages = []AgentMessage{marker}
 							hasMoreToolCalls = false
 							continue
@@ -310,7 +311,7 @@ func runLoop(
 					}
 				}
 
-				am := NewAgentMessage(core.NewAssistantMsg(*message))
+				am := NewAgentMessage(ai.NewAssistantMsg(*message))
 				events <- AgentEvent{
 					Type:        EventTurnEnd,
 					TurnMessage: &am,
@@ -335,7 +336,7 @@ func runLoop(
 			autoResumeCount = 0
 
 			// Check for tool calls
-			var toolCalls []core.ToolCall
+			var toolCalls []ai.ToolCall
 			for _, c := range message.Content {
 				if c.IsToolCall() {
 					toolCalls = append(toolCalls, *c.ToolCall)
@@ -343,19 +344,19 @@ func runLoop(
 			}
 			hasMoreToolCalls = len(toolCalls) > 0
 
-			var toolResults []core.ToolResultMessage
+			var toolResults []ai.ToolResultMessage
 			if hasMoreToolCalls {
 				batch := executeToolCalls(ctx, currentCtx, message, events)
 				toolResults = batch.messages
 				hasMoreToolCalls = !batch.terminate
 
 				for _, result := range toolResults {
-					currentCtx.Messages = append(currentCtx.Messages, NewAgentMessage(core.NewToolResultMsg(result)))
-					newMessages = append(newMessages, NewAgentMessage(core.NewToolResultMsg(result)))
+					currentCtx.Messages = append(currentCtx.Messages, NewAgentMessage(ai.NewToolResultMsg(result)))
+					newMessages = append(newMessages, NewAgentMessage(ai.NewToolResultMsg(result)))
 				}
 			}
 
-			am := NewAgentMessage(core.NewAssistantMsg(*message))
+			am := NewAgentMessage(ai.NewAssistantMsg(*message))
 			events <- AgentEvent{
 				Type:        EventTurnEnd,
 				TurnMessage: &am,
@@ -417,8 +418,8 @@ var midToolCallRetryBackoffs = []time.Duration{
 // of any tool_use block without matching tool_result, and "{}" arguments are
 // unreplayable. Anything with stop_reason != error (including a normally
 // completed zero-arg tool call where stop_reason=toolUse) is left alone.
-func hasIncompleteToolCall(m *core.AssistantMessage) bool {
-	if m == nil || m.StopReason != core.StopReasonError {
+func hasIncompleteToolCall(m *ai.AssistantMessage) bool {
+	if m == nil || m.StopReason != ai.StopReasonError {
 		return false
 	}
 	for _, c := range m.Content {
@@ -441,8 +442,8 @@ func retryMidToolCall(
 	config *AgentLoopConfig,
 	streamFn StreamFn,
 	events chan<- AgentEvent,
-	broken *core.AssistantMessage,
-) *core.AssistantMessage {
+	broken *ai.AssistantMessage,
+) *ai.AssistantMessage {
 	message := broken
 	dropTrailingPartial(agentCtx)
 	for attempt, backoff := range midToolCallRetryBackoffs {
@@ -525,7 +526,7 @@ func foldStreamErrorNoteIntoFirstUser(msgs []AgentMessage, note string) bool {
 	if !ok {
 		return false
 	}
-	merged := core.NewUserMsg(note+"\n\n"+existing, u.Timestamp)
+	merged := ai.NewUserMsg(note+"\n\n"+existing, u.Timestamp)
 	msgs[0] = NewAgentMessage(merged)
 	return true
 }
@@ -537,7 +538,7 @@ func streamAssistantResponse(
 	config *AgentLoopConfig,
 	streamFn StreamFn,
 	events chan<- AgentEvent,
-) *core.AssistantMessage {
+) *ai.AssistantMessage {
 	// Apply context transform if configured
 	messages := agentCtx.Messages
 	if config.TransformContext != nil {
@@ -559,12 +560,12 @@ func streamAssistantResponse(
 
 	// Build LLM context
 	toolSlice := agentCtx.Tools.Slice()
-	llmTools := make([]core.Tool, len(toolSlice))
+	llmTools := make([]ai.Tool, len(toolSlice))
 	for i, t := range toolSlice {
 		llmTools[i] = t.Tool
 	}
 
-	llmContext := core.Context{
+	llmContext := ai.Context{
 		SystemPrompt: agentCtx.SystemPrompt,
 		Messages:     llmMessages,
 		Tools:        llmTools,
@@ -573,8 +574,8 @@ func streamAssistantResponse(
 	// Resolve API key
 	apiKey := config.ApiKey
 	var apiKeyError string
-	if config.GetApiKey != nil {
-		if resolved, err := config.GetApiKey(config.Model.Provider); err == nil && resolved != "" {
+	if config.GetAPIKey != nil {
+		if resolved, err := config.GetAPIKey(config.Model.Provider); err == nil && resolved != "" {
 			apiKey = resolved
 		} else if err != nil {
 			apiKeyError = err.Error()
@@ -582,17 +583,17 @@ func streamAssistantResponse(
 	}
 
 	// Stream
-	var refreshApiKey func(string) string
-	if config.GetApiKey != nil {
-		refreshApiKey = func(provider string) string {
-			if resolved, err := config.GetApiKey(provider); err == nil && resolved != "" {
+	var refreshAPIKey func(string) string
+	if config.GetAPIKey != nil {
+		refreshAPIKey = func(provider string) string {
+			if resolved, err := config.GetAPIKey(provider); err == nil && resolved != "" {
 				return resolved
 			}
 			return ""
 		}
 	}
-	opts := &core.SimpleStreamOptions{
-		StreamOptions: core.StreamOptions{
+	opts := &ai.SimpleStreamOptions{
+		StreamOptions: ai.StreamOptions{
 			ApiKey:          apiKey,
 			ApiKeyError:     apiKeyError,
 			Transport:       config.Transport,
@@ -606,7 +607,7 @@ func streamAssistantResponse(
 			Compaction:      config.Compaction,
 			OnPayload:       config.OnPayload,
 			OnRetry:         config.OnRetry,
-			RefreshApiKey:   refreshApiKey,
+			RefreshApiKey:   refreshAPIKey,
 		},
 		Reasoning:       config.Reasoning,
 		ThinkingBudgets: config.ThinkingBudgets,
@@ -622,28 +623,28 @@ func streamAssistantResponse(
 	stream := streamFn(config.Model, llmContext, opts)
 
 	var addedPartial bool
-	var partialMsg *core.AssistantMessage
+	var partialMsg *ai.AssistantMessage
 
 	for event := range stream.Events {
 		switch event.Type {
-		case core.EventStart:
+		case ai.EventStart:
 			partialMsg = event.Partial
 			if partialMsg != nil {
-				agentCtx.Messages = append(agentCtx.Messages, NewAgentMessage(core.NewAssistantMsg(*partialMsg)))
+				agentCtx.Messages = append(agentCtx.Messages, NewAgentMessage(ai.NewAssistantMsg(*partialMsg)))
 				addedPartial = true
-				am := NewAgentMessage(core.NewAssistantMsg(*partialMsg))
+				am := NewAgentMessage(ai.NewAssistantMsg(*partialMsg))
 				events <- AgentEvent{Type: EventMessageStart, Message: &am}
 			}
 
-		case core.EventTextStart, core.EventTextDelta, core.EventTextEnd,
-			core.EventThinkingStart, core.EventThinkingDelta, core.EventThinkingEnd,
-			core.EventToolcallStart, core.EventToolcallDelta, core.EventToolcallEnd:
+		case ai.EventTextStart, ai.EventTextDelta, ai.EventTextEnd,
+			ai.EventThinkingStart, ai.EventThinkingDelta, ai.EventThinkingEnd,
+			ai.EventToolcallStart, ai.EventToolcallDelta, ai.EventToolcallEnd:
 			if event.Partial != nil {
 				partialMsg = event.Partial
 				if addedPartial {
-					agentCtx.Messages[len(agentCtx.Messages)-1] = NewAgentMessage(core.NewAssistantMsg(*partialMsg))
+					agentCtx.Messages[len(agentCtx.Messages)-1] = NewAgentMessage(ai.NewAssistantMsg(*partialMsg))
 				}
-				am := NewAgentMessage(core.NewAssistantMsg(*partialMsg))
+				am := NewAgentMessage(ai.NewAssistantMsg(*partialMsg))
 				events <- AgentEvent{
 					Type:                  EventMessageUpdate,
 					Message:               &am,
@@ -651,7 +652,7 @@ func streamAssistantResponse(
 				}
 			}
 
-		case core.EventDone, core.EventError:
+		case ai.EventDone, ai.EventError:
 			finalMsg := stream.Result()
 			if finalMsg == nil {
 				finalMsg = errorAssistantMessage(config.Model, "stream ended without result")
@@ -662,15 +663,15 @@ func streamAssistantResponse(
 				"error", finalMsg.ErrorMessage,
 			)
 			if addedPartial {
-				agentCtx.Messages[len(agentCtx.Messages)-1] = NewAgentMessage(core.NewAssistantMsg(*finalMsg))
+				agentCtx.Messages[len(agentCtx.Messages)-1] = NewAgentMessage(ai.NewAssistantMsg(*finalMsg))
 			} else {
-				agentCtx.Messages = append(agentCtx.Messages, NewAgentMessage(core.NewAssistantMsg(*finalMsg)))
+				agentCtx.Messages = append(agentCtx.Messages, NewAgentMessage(ai.NewAssistantMsg(*finalMsg)))
 			}
 			if !addedPartial {
-				am := NewAgentMessage(core.NewAssistantMsg(*finalMsg))
+				am := NewAgentMessage(ai.NewAssistantMsg(*finalMsg))
 				events <- AgentEvent{Type: EventMessageStart, Message: &am}
 			}
-			am := NewAgentMessage(core.NewAssistantMsg(*finalMsg))
+			am := NewAgentMessage(ai.NewAssistantMsg(*finalMsg))
 			events <- AgentEvent{Type: EventMessageEnd, Message: &am}
 			return finalMsg
 		}
@@ -686,7 +687,7 @@ func streamAssistantResponse(
 
 // executedToolCallBatch is the result of executing a batch of tool calls.
 type executedToolCallBatch struct {
-	messages  []core.ToolResultMessage
+	messages  []ai.ToolResultMessage
 	terminate bool
 }
 
@@ -694,17 +695,17 @@ type executedToolCallBatch struct {
 func executeToolCalls(
 	ctx context.Context,
 	agentCtx *AgentContext,
-	assistantMsg *core.AssistantMessage,
+	assistantMsg *ai.AssistantMessage,
 	events chan<- AgentEvent,
 ) executedToolCallBatch {
-	var toolCalls []core.ToolCall
+	var toolCalls []ai.ToolCall
 	for _, c := range assistantMsg.Content {
 		if c.IsToolCall() {
 			toolCalls = append(toolCalls, *c.ToolCall)
 		}
 	}
 
-	var results []core.ToolResultMessage
+	var results []ai.ToolResultMessage
 	var allTerminate bool = true
 
 	for _, tc := range toolCalls {
@@ -730,12 +731,12 @@ func executeToolCalls(
 
 		if !found {
 			result = AgentToolResult{
-				Content: []core.ToolResultContent{{Type: "text", Text: fmt.Sprintf("Tool %s not found", tc.Name)}},
+				Content: []ai.ToolResultContent{{Type: "text", Text: fmt.Sprintf("Tool %s not found", tc.Name)}},
 			}
 			isError = true
 		} else if tool.Execute == nil {
 			result = AgentToolResult{
-				Content: []core.ToolResultContent{{Type: "text", Text: fmt.Sprintf("Tool %s has no execute function", tc.Name)}},
+				Content: []ai.ToolResultContent{{Type: "text", Text: fmt.Sprintf("Tool %s has no execute function", tc.Name)}},
 			}
 			isError = true
 		} else {
@@ -753,7 +754,7 @@ func executeToolCalls(
 			})
 			if err != nil {
 				result = AgentToolResult{
-					Content: []core.ToolResultContent{{Type: "text", Text: err.Error()}},
+					Content: []ai.ToolResultContent{{Type: "text", Text: err.Error()}},
 					IsError: true,
 				}
 				isError = true
@@ -771,7 +772,7 @@ func executeToolCalls(
 			IsError:     isError,
 		}
 
-		toolResult := core.ToolResultMessage{
+		toolResult := ai.ToolResultMessage{
 			Role:       "toolResult",
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
@@ -786,7 +787,7 @@ func executeToolCalls(
 			allTerminate = false
 		}
 
-		trMsg := NewAgentMessage(core.NewToolResultMsg(toolResult))
+		trMsg := NewAgentMessage(ai.NewToolResultMsg(toolResult))
 		events <- AgentEvent{Type: EventMessageStart, Message: &trMsg}
 		events <- AgentEvent{Type: EventMessageEnd, Message: &trMsg}
 	}
@@ -798,14 +799,14 @@ func executeToolCalls(
 }
 
 // errorAssistantMessage creates an error assistant message.
-func errorAssistantMessage(model *core.Model, msg string) *core.AssistantMessage {
-	return &core.AssistantMessage{
+func errorAssistantMessage(model *ai.Model, msg string) *ai.AssistantMessage {
+	return &ai.AssistantMessage{
 		Role:         "assistant",
-		Content:      []core.AssistantContent{},
+		Content:      []ai.AssistantContent{},
 		Api:          model.Api,
 		Provider:     model.Provider,
 		Model:        model.ID,
-		StopReason:   core.StopReasonError,
+		StopReason:   ai.StopReasonError,
 		ErrorMessage: msg,
 		Timestamp:    time.Now().UnixMilli(),
 	}
