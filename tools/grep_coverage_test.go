@@ -14,13 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeRgPath installs a fake `rg` that prints $FAKE_RG_OUT and exits
-// $FAKE_RG_EXIT, returning its absolute path.
-func fakeRgPath(t *testing.T) string {
+// fakeRg installs a fake `rg` in a fresh temp dir that prints the given
+// output, returning its absolute path. The output travels in a file next to
+// the script rather than via env vars, so callers stay parallel-safe.
+func fakeRg(t *testing.T, out string) string {
 	t.Helper()
 	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "out"), []byte(out), 0o644))
 	p := filepath.Join(dir, "rg")
-	require.NoError(t, os.WriteFile(p, []byte("#!/bin/bash\nprintf '%s' \"$FAKE_RG_OUT\"\nexit ${FAKE_RG_EXIT:-0}\n"), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte("#!/bin/bash\ncat \"$(dirname \"$0\")/out\"\n"), 0o755))
 	return p
 }
 
@@ -39,53 +41,54 @@ func TestGrepWithRipgrep_StdoutPipeError(t *testing.T) {
 }
 
 func TestGrepWithRipgrep_StartError(t *testing.T) {
+	t.Parallel()
 	_, err := grepWithRipgrep(context.Background(), "/nonexistent/rg-binary", "x", t.TempDir(), true, false, false, "", 0, 100)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to start ripgrep")
 }
 
 func TestGrepWithRipgrep_NoMatches(t *testing.T) {
-	rg := fakeRgPath(t)
-	t.Setenv("FAKE_RG_OUT", "")
+	t.Parallel()
+	rg := fakeRg(t, "")
 	res, err := grepWithRipgrep(context.Background(), rg, "x", t.TempDir(), true, false, false, "", 0, 100)
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "No matches found")
 }
 
 func TestGrepWithRipgrep_BlankAndBadJSON(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	require.NoError(t, os.WriteFile(f, []byte("hello\nworld\n"), 0o644))
-	rg := fakeRgPath(t)
 	out := strings.Join([]string{
 		"",                // blank line -> skipped
 		"not-json-at-all", // unmarshal error -> skipped
 		`{"type":"begin","data":{"path":{"text":"x"}}}`, // non-match event
 		rgMatch(f, 1),
 	}, "\n")
-	t.Setenv("FAKE_RG_OUT", out+"\n")
+	rg := fakeRg(t, out+"\n")
 	res, err := grepWithRipgrep(context.Background(), rg, "hello", dir, true, false, false, "", 0, 100)
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "hello")
 }
 
 func TestGrepWithRipgrep_UnreadableFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	rg := fakeRgPath(t)
-	t.Setenv("FAKE_RG_OUT", rgMatch(filepath.Join(dir, "ghost.txt"), 3)+"\n")
+	rg := fakeRg(t, rgMatch(filepath.Join(dir, "ghost.txt"), 3)+"\n")
 	res, err := grepWithRipgrep(context.Background(), rg, "x", dir, true, false, false, "", 0, 100)
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "(unable to read file)")
 }
 
 func TestGrepWithRipgrep_ContextAndLongLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "multi.txt")
 	longLine := strings.Repeat("z", 600) // > GrepMaxLineLength (500)
 	content := "line1\nline2\n" + longLine + "\nline4\nline5\n"
 	require.NoError(t, os.WriteFile(f, []byte(content), 0o644))
-	rg := fakeRgPath(t)
-	t.Setenv("FAKE_RG_OUT", rgMatch(f, 3)+"\n") // match the long line
+	rg := fakeRg(t, rgMatch(f, 3)+"\n") // match the long line
 	res, err := grepWithRipgrep(context.Background(), rg, "z", dir, true, false, false, "", 1, 100)
 	require.NoError(t, err)
 	txt := res.Content[0].Text
@@ -95,15 +98,15 @@ func TestGrepWithRipgrep_ContextAndLongLine(t *testing.T) {
 }
 
 func TestGrepWithRipgrep_LimitReached(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	require.NoError(t, os.WriteFile(f, []byte("m\nm\nm\nm\nm\n"), 0o644))
-	rg := fakeRgPath(t)
 	var lines []string
 	for i := 1; i <= 5; i++ {
 		lines = append(lines, rgMatch(f, i))
 	}
-	t.Setenv("FAKE_RG_OUT", strings.Join(lines, "\n")+"\n")
+	rg := fakeRg(t, strings.Join(lines, "\n")+"\n")
 	res, err := grepWithRipgrep(context.Background(), rg, "m", dir, true, false, false, "", 0, 2)
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "matches limit reached")
@@ -113,6 +116,7 @@ func TestGrepWithRipgrep_LimitReached(t *testing.T) {
 }
 
 func TestGrepWithRipgrep_ByteTruncation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "big.txt")
 	var b strings.Builder
@@ -120,12 +124,11 @@ func TestGrepWithRipgrep_ByteTruncation(t *testing.T) {
 		fmt.Fprintf(&b, "match line %d %s\n", i, strings.Repeat("y", 80))
 	}
 	require.NoError(t, os.WriteFile(f, []byte(b.String()), 0o644))
-	rg := fakeRgPath(t)
 	var lines []string
 	for i := 1; i <= 800; i++ {
 		lines = append(lines, rgMatch(f, i))
 	}
-	t.Setenv("FAKE_RG_OUT", strings.Join(lines, "\n")+"\n")
+	rg := fakeRg(t, strings.Join(lines, "\n")+"\n")
 	res, err := grepWithRipgrep(context.Background(), rg, "match", dir, true, false, false, "", 0, 100000)
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "limit reached")
@@ -135,6 +138,7 @@ func TestGrepWithRipgrep_ByteTruncation(t *testing.T) {
 }
 
 func TestGrepTool_ContextAndLimitClamp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha\nbeta\ngamma\n"), 0o644))
 	tool := NewGrepTool(dir)

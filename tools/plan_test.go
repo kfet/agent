@@ -41,6 +41,7 @@ func newRecordingPublisher(out *[]recordedPublish) CardPublisher {
 }
 
 func TestPlanTool_Basic(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -79,6 +80,7 @@ func TestPlanTool_Basic(t *testing.T) {
 }
 
 func TestPlanTool_EmptyEntries(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -98,6 +100,7 @@ func TestPlanTool_EmptyEntries(t *testing.T) {
 }
 
 func TestPlanTool_InvalidStatus(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -119,6 +122,7 @@ func TestPlanTool_InvalidStatus(t *testing.T) {
 }
 
 func TestPlanTool_MissingContent(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -140,6 +144,7 @@ func TestPlanTool_MissingContent(t *testing.T) {
 }
 
 func TestPlanTool_NoEntriesParam(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -157,6 +162,7 @@ func TestPlanTool_NoEntriesParam(t *testing.T) {
 }
 
 func TestPlanTool_EntriesNotArray(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 
@@ -181,6 +187,7 @@ func TestPlanTool_EntriesNotArray(t *testing.T) {
 // successful plan mutation, the publisher (when non-nil) is invoked with
 // the same title/entries/metadata as the sink, plus the tool-call id.
 func TestPlanTool_InvokesPublisherOnUpdate(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	var pubs []recordedPublish
 	tool := NewPlanTool(sink, newRecordingPublisher(&pubs))
@@ -221,6 +228,7 @@ func TestPlanTool_InvokesPublisherOnUpdate(t *testing.T) {
 // still notifies the publisher — host code uses that signal to clear
 // its own state.
 func TestPlanTool_InvokesPublisherOnEmpty(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	var pubs []recordedPublish
 	tool := NewPlanTool(sink, newRecordingPublisher(&pubs))
@@ -243,6 +251,7 @@ func TestPlanTool_InvokesPublisherOnEmpty(t *testing.T) {
 // plan tool functions without a publisher — useful for embedded or
 // non-UI consumers that have no card store.
 func TestPlanTool_NilPublisherIsSafe(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	tool := NewPlanTool(sink, nil)
 	_, err := tool.Execute(context.Background(), "tc", map[string]any{
@@ -258,6 +267,7 @@ func TestPlanTool_NilPublisherIsSafe(t *testing.T) {
 // TestPlanTool_DoesNotInvokePublisherOnParseError pins that the
 // publisher is only called when the tool actually commits a plan.
 func TestPlanTool_DoesNotInvokePublisherOnParseError(t *testing.T) {
+	t.Parallel()
 	sink := &fakePlanSink{}
 	var pubs []recordedPublish
 	tool := NewPlanTool(sink, newRecordingPublisher(&pubs))

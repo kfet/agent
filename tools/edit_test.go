@@ -12,6 +12,7 @@ import (
 // --- edit-diff helpers ---
 
 func TestDetectLineEnding(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -34,6 +35,7 @@ func TestDetectLineEnding(t *testing.T) {
 }
 
 func TestNormalizeToLF(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input, want string
 	}{
@@ -51,6 +53,7 @@ func TestNormalizeToLF(t *testing.T) {
 }
 
 func TestRestoreLineEndings(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input, ending, want string
 	}{
@@ -66,6 +69,7 @@ func TestRestoreLineEndings(t *testing.T) {
 }
 
 func TestNormalizeForFuzzyMatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -90,6 +94,7 @@ func TestNormalizeForFuzzyMatch(t *testing.T) {
 }
 
 func TestFuzzyFindText_ExactMatch(t *testing.T) {
+	t.Parallel()
 	result := fuzzyFindText("hello world", "world")
 	if !result.found {
 		t.Fatal("expected found")
@@ -103,6 +108,7 @@ func TestFuzzyFindText_ExactMatch(t *testing.T) {
 }
 
 func TestFuzzyFindText_FuzzyMatch(t *testing.T) {
+	t.Parallel()
 	// Smart quote should be normalized
 	result := fuzzyFindText("it\u2019s a test", "it's a test")
 	if !result.found {
@@ -114,6 +120,7 @@ func TestFuzzyFindText_FuzzyMatch(t *testing.T) {
 }
 
 func TestFuzzyFindText_TrailingWhitespace(t *testing.T) {
+	t.Parallel()
 	result := fuzzyFindText("hello  \nworld", "hello\nworld")
 	if !result.found {
 		t.Fatal("expected found via trailing whitespace normalization")
@@ -124,6 +131,7 @@ func TestFuzzyFindText_TrailingWhitespace(t *testing.T) {
 }
 
 func TestFuzzyFindText_NotFound(t *testing.T) {
+	t.Parallel()
 	result := fuzzyFindText("hello world", "xyz")
 	if result.found {
 		t.Error("expected not found")
@@ -133,6 +141,7 @@ func TestFuzzyFindText_NotFound(t *testing.T) {
 // --- EditTool ---
 
 func TestEditTool_BasicReplacement(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("hello world"), 0644)
@@ -157,6 +166,7 @@ func TestEditTool_BasicReplacement(t *testing.T) {
 }
 
 func TestEditTool_FileNotFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewEditTool(dir)
 	_, err := tool.Execute(context.Background(), "tc1", map[string]any{
@@ -170,6 +180,7 @@ func TestEditTool_FileNotFound(t *testing.T) {
 }
 
 func TestEditTool_TextNotFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644)
 
@@ -188,6 +199,7 @@ func TestEditTool_TextNotFound(t *testing.T) {
 }
 
 func TestEditTool_MultipleOccurrences(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("foo bar foo"), 0644)
 
@@ -206,6 +218,7 @@ func TestEditTool_MultipleOccurrences(t *testing.T) {
 }
 
 func TestEditTool_NoChange(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644)
 
@@ -224,6 +237,7 @@ func TestEditTool_NoChange(t *testing.T) {
 }
 
 func TestEditTool_BOM(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("\uFEFFhello world"), 0644)
@@ -248,6 +262,7 @@ func TestEditTool_BOM(t *testing.T) {
 }
 
 func TestEditTool_CRLFPreservation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("hello\r\nworld\r\n"), 0644)
@@ -269,6 +284,7 @@ func TestEditTool_CRLFPreservation(t *testing.T) {
 }
 
 func TestEditTool_FuzzyMatchSmartQuotes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	// File has smart quotes
@@ -291,6 +307,7 @@ func TestEditTool_FuzzyMatchSmartQuotes(t *testing.T) {
 }
 
 func TestEditTool_MultilineReplacement(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("line1\nline2\nline3\nline4"), 0644)
@@ -312,6 +329,7 @@ func TestEditTool_MultilineReplacement(t *testing.T) {
 }
 
 func TestEditTool_AbsolutePath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("hello world"), 0644)
@@ -331,6 +349,7 @@ func TestEditTool_AbsolutePath(t *testing.T) {
 }
 
 func TestEditTool_Abort(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -348,6 +367,7 @@ func TestEditTool_Abort(t *testing.T) {
 }
 
 func TestEditTool_FuzzyMatchPreservesUnrelatedContent(t *testing.T) {
+	t.Parallel()
 	// Regression test: fuzzy matching should only affect the matched region,
 	// not normalize the entire file (e.g., smart quotes elsewhere should survive).
 	dir := t.TempDir()
@@ -384,6 +404,7 @@ func TestEditTool_FuzzyMatchPreservesUnrelatedContent(t *testing.T) {
 }
 
 func TestFuzzyFindText_FuzzyMatchReturnsOriginalContent(t *testing.T) {
+	t.Parallel()
 	// Verify that fuzzy match returns the original content for replacement,
 	// not the normalized version.
 	content := "prefix \u201Chello\u201D suffix"
@@ -405,6 +426,7 @@ func TestFuzzyFindText_FuzzyMatchReturnsOriginalContent(t *testing.T) {
 }
 
 func TestMapFuzzyToOriginal_MultiByte(t *testing.T) {
+	t.Parallel()
 	// \u2014 (em dash, 3 bytes) maps to "-" (1 byte)
 	original := "before\u2014after"
 	normalized := normalizeForFuzzyMatch(original)
@@ -424,6 +446,7 @@ func TestMapFuzzyToOriginal_MultiByte(t *testing.T) {
 }
 
 func TestMapFuzzyToOriginal_TrailingWhitespaceAtBoundary(t *testing.T) {
+	t.Parallel()
 	// Trailing whitespace is stripped per line; match ends exactly at line boundary
 	original := "hello  \nworld"
 	normalized := normalizeForFuzzyMatch(original) // "hello\nworld"
@@ -442,6 +465,7 @@ func TestMapFuzzyToOriginal_TrailingWhitespaceAtBoundary(t *testing.T) {
 }
 
 func TestMapFuzzyToOriginal_MixedNormalizations(t *testing.T) {
+	t.Parallel()
 	// Smart quotes + em dash + nbsp all in the same match region
 	original := "\u201Chello\u201D\u2014world\u00A0here"
 	normalized := normalizeForFuzzyMatch(original) // "\"hello\"-world here"
@@ -459,6 +483,7 @@ func TestMapFuzzyToOriginal_MixedNormalizations(t *testing.T) {
 }
 
 func TestMapFuzzyToOriginal_MatchAtStart(t *testing.T) {
+	t.Parallel()
 	original := "\u2019s a test suffix"
 	normalized := normalizeForFuzzyMatch(original) // "'s a test suffix"
 
@@ -478,6 +503,7 @@ func TestMapFuzzyToOriginal_MatchAtStart(t *testing.T) {
 }
 
 func TestMapFuzzyToOriginal_MatchAtEnd(t *testing.T) {
+	t.Parallel()
 	original := "prefix here\u2019s"
 	normalized := normalizeForFuzzyMatch(original) // "prefix here's"
 
@@ -497,6 +523,7 @@ func TestMapFuzzyToOriginal_MatchAtEnd(t *testing.T) {
 }
 
 func TestEditTool_FuzzyMatchMultiByte(t *testing.T) {
+	t.Parallel()
 	// Full integration test: fuzzy match with multi-byte Unicode doesn't corrupt the file
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
@@ -530,6 +557,7 @@ func TestEditTool_FuzzyMatchMultiByte(t *testing.T) {
 }
 
 func TestEditTool_PathRequired(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewEditTool(dir)
 	_, err := tool.Execute(context.Background(), "tc1", map[string]any{
@@ -542,6 +570,7 @@ func TestEditTool_PathRequired(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_SuccessfulRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	initial := "hello world"
 	current := initial
@@ -572,6 +601,7 @@ func TestEditToolWithReadWriter_SuccessfulRoundTrip(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_TextNotFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) {
 		return "hello world", nil
@@ -590,6 +620,7 @@ func TestEditToolWithReadWriter_TextNotFound(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_MultipleOccurrences(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) {
 		return "ab ab ab", nil
@@ -608,6 +639,7 @@ func TestEditToolWithReadWriter_MultipleOccurrences(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_EmptyPath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) { return "", nil })
 	writeFn := WriteFileFn(func(_ context.Context, _, _ string) error { return nil })
@@ -622,6 +654,7 @@ func TestEditToolWithReadWriter_EmptyPath(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) { return "ab", nil })
 	writeFn := WriteFileFn(func(_ context.Context, _, _ string) error { return nil })
@@ -638,6 +671,7 @@ func TestEditToolWithReadWriter_ContextCancellation(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_ReadFnError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) {
 		return "", errors.New("read failed")

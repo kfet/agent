@@ -12,6 +12,7 @@ import (
 )
 
 func TestTruncateForLog(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "abc", truncateForLog("abc", 10))
 	require.Equal(t, "ab...", truncateForLog("abcdef", 2))
 }
@@ -87,6 +88,7 @@ func TestExecuteBash_GenericWaitError(t *testing.T) {
 
 // and full-output temp-file path.
 func TestExecuteBash_TruncationNotice(t *testing.T) {
+	t.Parallel()
 	// Produce more than DefaultMaxLines lines to trigger line truncation.
 	res, err := executeBash(context.Background(),
 		"for i in $(seq 1 2500); do echo line$i; done", t.TempDir(), 30*time.Second)
@@ -97,6 +99,7 @@ func TestExecuteBash_TruncationNotice(t *testing.T) {
 // TestExecuteBash_ByteTruncationNotice produces a handful of very long lines so
 // truncation trips on the byte budget rather than the line budget.
 func TestExecuteBash_ByteTruncationNotice(t *testing.T) {
+	t.Parallel()
 	// 10 lines of ~8KB each = ~80KB > 50KB byte budget, but only 10 lines.
 	res, err := executeBash(context.Background(),
 		"for i in $(seq 1 10); do head -c 8000 /dev/zero | tr '\\0' a; echo; done",
@@ -108,6 +111,7 @@ func TestExecuteBash_ByteTruncationNotice(t *testing.T) {
 // TestExecuteBash_TimeoutWithOutput hits the deadline path after some output
 // has already been produced.
 func TestExecuteBash_TimeoutWithOutput(t *testing.T) {
+	t.Parallel()
 	_, err := executeBash(context.Background(), "echo started; sleep 10", t.TempDir(), 200*time.Millisecond)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "started")
@@ -117,6 +121,7 @@ func TestExecuteBash_TimeoutWithOutput(t *testing.T) {
 // TestExecuteBash_CancelWithOutput hits the cancellation path after some output
 // has already been produced.
 func TestExecuteBash_CancelWithOutput(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		time.Sleep(100 * time.Millisecond)

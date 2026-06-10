@@ -10,6 +10,7 @@ import (
 )
 
 func TestBashTool_Echo(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "echo hello",
@@ -26,6 +27,7 @@ func TestBashTool_Echo(t *testing.T) {
 }
 
 func TestBashTool_Stderr(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "echo error >&2",
@@ -39,6 +41,7 @@ func TestBashTool_Stderr(t *testing.T) {
 }
 
 func TestBashTool_ExitCode(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	_, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "exit 42",
@@ -52,6 +55,7 @@ func TestBashTool_ExitCode(t *testing.T) {
 }
 
 func TestBashTool_Timeout(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	_, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "sleep 10",
@@ -110,6 +114,7 @@ func TestBashTool_ExplicitTimeoutOverridesDefault(t *testing.T) {
 }
 
 func TestBashTool_Abort(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,6 +137,7 @@ func TestBashTool_Abort(t *testing.T) {
 // killed, causing cmd.Wait() (and therefore Execute) to block until all
 // children exit naturally.
 func TestBashTool_AbortWithChildren(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -163,6 +169,7 @@ func TestBashTool_AbortWithChildren(t *testing.T) {
 // "killpg-after-bash-exits" reaping, this would block until the background
 // `sleep` finishes (~30s), even though bash itself exited immediately.
 func TestBashTool_BackgroundChildHoldsPipe(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 
 	start := time.Now()
@@ -185,6 +192,7 @@ func TestBashTool_BackgroundChildHoldsPipe(t *testing.T) {
 }
 
 func TestBashTool_NoOutput(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "true",
@@ -198,6 +206,7 @@ func TestBashTool_NoOutput(t *testing.T) {
 }
 
 func TestBashTool_MissingCommand(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	_, err := tool.Execute(context.Background(), "call-1", map[string]any{}, nil)
 	if err == nil {
@@ -206,6 +215,7 @@ func TestBashTool_MissingCommand(t *testing.T) {
 }
 
 func TestBashTool_CwdDoesNotExist(t *testing.T) {
+	t.Parallel()
 	// When the cwd does not exist, bash must not run the command in some other
 	// directory. It returns a clear error result and does NOT execute.
 	tool := NewBashTool("/nonexistent/path")
@@ -228,6 +238,7 @@ func TestBashTool_CwdDoesNotExist(t *testing.T) {
 }
 
 func TestBashTool_CwdDeletedAtRuntime(t *testing.T) {
+	t.Parallel()
 	// Simulate a worktree/temp dir being removed out from under a live
 	// session: the cwd was valid when the tool was constructed but is gone
 	// by the time the command runs. The command must NOT run in a surviving
@@ -265,6 +276,7 @@ func TestBashTool_CwdDeletedAtRuntime(t *testing.T) {
 }
 
 func TestBashTool_CwdParamOverride(t *testing.T) {
+	t.Parallel()
 	// The cwd parameter runs the command in a specified directory instead of
 	// the session default.
 	sessionDir := t.TempDir()
@@ -287,6 +299,7 @@ func TestBashTool_CwdParamOverride(t *testing.T) {
 }
 
 func TestBashTool_CwdParamRecoversDeletedSessionDir(t *testing.T) {
+	t.Parallel()
 	// When the session dir is gone, passing an existing cwd recovers cleanly
 	// without resorting to a `cd` prefix.
 	gone := filepath.Join(t.TempDir(), "worktree")
@@ -314,6 +327,7 @@ func TestBashTool_CwdParamRecoversDeletedSessionDir(t *testing.T) {
 }
 
 func TestBashTool_MultilineOutput(t *testing.T) {
+	t.Parallel()
 	tool := NewBashTool(t.TempDir())
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "echo line1; echo line2; echo line3",
@@ -328,6 +342,7 @@ func TestBashTool_MultilineOutput(t *testing.T) {
 }
 
 func TestBashTool_Pwd(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewBashTool(dir)
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
@@ -343,6 +358,7 @@ func TestBashTool_Pwd(t *testing.T) {
 }
 
 func TestBashToolWithPrefix_PrependedCorrectly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewBashToolWithPrefix(dir, "export MY_PREFIX_VAR=hello")
 	result, err := tool.Execute(context.Background(), "call-1", map[string]any{
@@ -357,6 +373,7 @@ func TestBashToolWithPrefix_PrependedCorrectly(t *testing.T) {
 }
 
 func TestBashToolWithPrefix_EmptyPrefixReturnsOriginal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	orig := NewBashTool(dir)
 	withPrefix := NewBashToolWithPrefix(dir, "")
@@ -373,6 +390,7 @@ func TestBashToolWithPrefix_EmptyPrefixReturnsOriginal(t *testing.T) {
 }
 
 func TestBashToolWithPrefix_NonStringCommandFallsThrough(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewBashToolWithPrefix(dir, "echo PREFIX")
 	// Non-string command param: the original executor returns an error.
@@ -386,6 +404,7 @@ func TestBashToolWithPrefix_NonStringCommandFallsThrough(t *testing.T) {
 }
 
 func TestBashToolWithPrefix_ForwardsCwd(t *testing.T) {
+	t.Parallel()
 	// The prefix wrapper (used by ACP mode) must forward the cwd override
 	// through its param copy, not drop it.
 	sessionDir := t.TempDir()

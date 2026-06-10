@@ -19,6 +19,7 @@ func execRead(t *testing.T, tool agent.AgentTool, params map[string]any) (agent.
 }
 
 func TestReadTool_BasicFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "hello.txt")
 	os.WriteFile(file, []byte("line1\nline2\nline3"), 0644)
@@ -37,6 +38,7 @@ func TestReadTool_BasicFile(t *testing.T) {
 }
 
 func TestReadTool_WithOffset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "lines.txt")
 	lines := make([]string, 10)
@@ -60,6 +62,7 @@ func TestReadTool_WithOffset(t *testing.T) {
 }
 
 func TestReadTool_WithLimit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "lines.txt")
 	lines := make([]string, 10)
@@ -81,6 +84,7 @@ func TestReadTool_WithLimit(t *testing.T) {
 }
 
 func TestReadTool_OffsetBeyondEnd(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "short.txt")
 	os.WriteFile(file, []byte("one\ntwo"), 0644)
@@ -96,6 +100,7 @@ func TestReadTool_OffsetBeyondEnd(t *testing.T) {
 }
 
 func TestReadTool_FileNotFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewReadTool(dir)
 	_, err := execRead(t, tool, map[string]any{"path": "nonexistent.txt"})
@@ -105,6 +110,7 @@ func TestReadTool_FileNotFound(t *testing.T) {
 }
 
 func TestReadTool_EmptyPath(t *testing.T) {
+	t.Parallel()
 	tool := NewReadTool("/tmp")
 	_, err := execRead(t, tool, map[string]any{"path": ""})
 	if err == nil {
@@ -113,6 +119,7 @@ func TestReadTool_EmptyPath(t *testing.T) {
 }
 
 func TestReadTool_Truncation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "big.txt")
 	// Create a file with more than DefaultMaxLines lines
@@ -134,6 +141,7 @@ func TestReadTool_Truncation(t *testing.T) {
 }
 
 func TestReadTool_AbsolutePath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "abs.txt")
 	os.WriteFile(file, []byte("absolute content"), 0644)
@@ -149,6 +157,7 @@ func TestReadTool_AbsolutePath(t *testing.T) {
 }
 
 func TestReadTool_Cancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "cancel.txt")
 	os.WriteFile(file, []byte("content"), 0644)
@@ -164,6 +173,7 @@ func TestReadTool_Cancellation(t *testing.T) {
 }
 
 func TestReadTool_Directory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
 
@@ -180,6 +190,7 @@ func TestReadTool_Directory(t *testing.T) {
 }
 
 func TestReadTool_OffsetAndLimit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "ol.txt"), []byte("line1\nline2\nline3\nline4\nline5"), 0644)
 
@@ -205,6 +216,7 @@ func TestReadTool_OffsetAndLimit(t *testing.T) {
 }
 
 func TestReadToolWithReader_DelegatesTextRead(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	called := false
 	readFn := ReadFileFn(func(_ context.Context, path string) (string, error) {
@@ -227,6 +239,7 @@ func TestReadToolWithReader_DelegatesTextRead(t *testing.T) {
 }
 
 func TestReadToolWithReader_ImageFallsBackToLocal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// Write a tiny valid 1x1 PNG
 	pngBytes := []byte{
@@ -273,6 +286,7 @@ func TestReadToolWithReader_ImageFallsBackToLocal(t *testing.T) {
 }
 
 func TestReadToolWithReader_OffsetLimitPassedThrough(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	var receivedPath string
 	readFn := ReadFileFn(func(_ context.Context, path string) (string, error) {
@@ -303,6 +317,7 @@ func TestReadToolWithReader_OffsetLimitPassedThrough(t *testing.T) {
 }
 
 func TestReadToolWithReader_EmptyPathReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) {
 		return "", nil
@@ -317,6 +332,7 @@ func TestReadToolWithReader_EmptyPathReturnsError(t *testing.T) {
 }
 
 func TestReadToolWithReader_ReadFnError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := ReadFileFn(func(_ context.Context, _ string) (string, error) {
 		return "", errors.New("delegate read failed")

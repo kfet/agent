@@ -9,6 +9,7 @@ import (
 )
 
 func TestExpandPath_Tilde(t *testing.T) {
+	t.Parallel()
 	home, _ := os.UserHomeDir()
 	if got := ExpandPath("~"); got != home {
 		t.Errorf("ExpandPath('~') = %q, want %q", got, home)
@@ -16,6 +17,7 @@ func TestExpandPath_Tilde(t *testing.T) {
 }
 
 func TestExpandPath_TildeSlash(t *testing.T) {
+	t.Parallel()
 	home, _ := os.UserHomeDir()
 	got := ExpandPath("~/Documents")
 	want := home + "/Documents"
@@ -25,6 +27,7 @@ func TestExpandPath_TildeSlash(t *testing.T) {
 }
 
 func TestExpandPath_RelativePath(t *testing.T) {
+	t.Parallel()
 	got := ExpandPath("foo/bar")
 	if got != "foo/bar" {
 		t.Errorf("ExpandPath('foo/bar') = %q, want 'foo/bar'", got)
@@ -32,6 +35,7 @@ func TestExpandPath_RelativePath(t *testing.T) {
 }
 
 func TestExpandPath_AtPrefix(t *testing.T) {
+	t.Parallel()
 	got := ExpandPath("@some/path")
 	if got != "some/path" {
 		t.Errorf("ExpandPath('@some/path') = %q, want 'some/path'", got)
@@ -39,6 +43,7 @@ func TestExpandPath_AtPrefix(t *testing.T) {
 }
 
 func TestExpandPath_UnicodeSpaces(t *testing.T) {
+	t.Parallel()
 	// non-breaking space → regular space
 	got := ExpandPath("hello\u00A0world")
 	if got != "hello world" {
@@ -47,6 +52,7 @@ func TestExpandPath_UnicodeSpaces(t *testing.T) {
 }
 
 func TestResolveToCwd_Relative(t *testing.T) {
+	t.Parallel()
 	got := ResolveToCwd("foo/bar.txt", "/home/user/project")
 	want := filepath.Join("/home/user/project", "foo/bar.txt")
 	if got != want {
@@ -55,6 +61,7 @@ func TestResolveToCwd_Relative(t *testing.T) {
 }
 
 func TestResolveToCwd_Absolute(t *testing.T) {
+	t.Parallel()
 	got := ResolveToCwd("/etc/config", "/home/user")
 	if got != "/etc/config" {
 		t.Errorf("ResolveToCwd = %q, want '/etc/config'", got)
@@ -62,6 +69,7 @@ func TestResolveToCwd_Absolute(t *testing.T) {
 }
 
 func TestResolveToCwd_TildeExpansion(t *testing.T) {
+	t.Parallel()
 	home, _ := os.UserHomeDir()
 	got := ResolveToCwd("~/foo", "/some/cwd")
 	want := home + "/foo"
@@ -71,6 +79,7 @@ func TestResolveToCwd_TildeExpansion(t *testing.T) {
 }
 
 func TestResolveReadPath_ExistingFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "test.txt")
 	os.WriteFile(f, []byte("hello"), 0644)
@@ -82,6 +91,7 @@ func TestResolveReadPath_ExistingFile(t *testing.T) {
 }
 
 func TestResolveReadPath_NonExistent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	got := ResolveReadPath("nonexistent.txt", dir)
 	want := filepath.Join(dir, "nonexistent.txt")
@@ -91,6 +101,7 @@ func TestResolveReadPath_NonExistent(t *testing.T) {
 }
 
 func TestResolveReadPath_NFDVariant(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// Create a file with NFD name (é decomposed)
 	nfdName := "caf\u0065\u0301.txt" // e + combining acute accent
@@ -108,6 +119,7 @@ func TestResolveReadPath_NFDVariant(t *testing.T) {
 }
 
 func TestIsHidden(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		hidden bool
@@ -127,6 +139,7 @@ func TestIsHidden(t *testing.T) {
 
 // Test macOS screenshot path variant
 func TestTryMacOSScreenshotPath(t *testing.T) {
+	t.Parallel()
 	input := "Screenshot 2024-01-01 at 10.30.00 AM.png"
 	got := tryMacOSScreenshotPath(input)
 	if got == input {
@@ -139,6 +152,7 @@ func TestTryMacOSScreenshotPath(t *testing.T) {
 }
 
 func TestNormalizeAtPrefix(t *testing.T) {
+	t.Parallel()
 	if got := normalizeAtPrefix("@foo"); got != "foo" {
 		t.Errorf("got %q", got)
 	}

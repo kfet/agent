@@ -35,6 +35,7 @@ func cancelOnNthErr(parent context.Context, n int) context.Context {
 }
 
 func TestWriteTool_ErrorPaths(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 	ctx := context.Background()
@@ -65,6 +66,7 @@ func TestWriteTool_ErrorPaths(t *testing.T) {
 }
 
 func TestWriteToolWithWriter_ErrorPaths(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 
@@ -139,6 +141,7 @@ func TestResolveReadPath_AllVariants(t *testing.T) {
 }
 
 func TestEditTool_ExtraErrorPaths(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewEditTool(dir)
 	ctx := context.Background()
@@ -169,6 +172,7 @@ func TestEditTool_ExtraErrorPaths(t *testing.T) {
 }
 
 func TestEditToolWithReadWriter_WriteFnError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	readFn := func(_ context.Context, _ string) (string, error) { return "hello", nil }
 	writeFn := func(_ context.Context, _, _ string) error { return context.DeadlineExceeded }
@@ -178,11 +182,13 @@ func TestEditToolWithReadWriter_WriteFnError(t *testing.T) {
 }
 
 func TestDetectLineEnding_LFBeforeCRLF(t *testing.T) {
+	t.Parallel()
 	// \n appears before \r\n -> dominant ending is "\n".
 	require.Equal(t, "\n", detectLineEnding("a\nb\r\nc"))
 }
 
 func TestEditDiff_ExtraBranches(t *testing.T) {
+	t.Parallel()
 	// contextLines <= 0 defaults internally.
 	_ = GenerateDiffString("a\nb\n", "a\nc\n", 0)
 

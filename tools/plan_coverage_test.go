@@ -8,20 +8,24 @@ import (
 )
 
 func TestParsePlanEntries_EntryNotObject(t *testing.T) {
+	t.Parallel()
 	_, err := parsePlanEntries(map[string]any{"entries": []any{"not-an-object"}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must be an object")
 }
 
 func TestParsePlanMetadata_NotAMap(t *testing.T) {
+	t.Parallel()
 	require.Nil(t, parsePlanMetadata(map[string]any{"metadata": "not-a-map"}))
 }
 
 func TestParsePlanMetadata_EmptyMap(t *testing.T) {
+	t.Parallel()
 	require.Nil(t, parsePlanMetadata(map[string]any{"metadata": map[string]any{}}))
 }
 
 func TestParsePlanMetadata_CapsAtFiveKeys(t *testing.T) {
+	t.Parallel()
 	md := map[string]any{}
 	for i := 0; i < 8; i++ {
 		md[string(rune('a'+i))] = "v"
@@ -31,6 +35,7 @@ func TestParsePlanMetadata_CapsAtFiveKeys(t *testing.T) {
 }
 
 func TestParsePlanMetadata_TruncatesLongValue(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("x", 200)
 	out := parsePlanMetadata(map[string]any{"metadata": map[string]any{"k": long}})
 	require.Len(t, out["k"], 80)

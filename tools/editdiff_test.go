@@ -6,6 +6,7 @@ import (
 )
 
 func TestGenerateDiffString_BasicInsert(t *testing.T) {
+	t.Parallel()
 	old := "line1\nline2\nline3"
 	new := "line1\nline2\nnewline\nline3"
 
@@ -25,6 +26,7 @@ func TestGenerateDiffString_BasicInsert(t *testing.T) {
 }
 
 func TestGenerateDiffString_BasicRemove(t *testing.T) {
+	t.Parallel()
 	old := "line1\nline2\nline3"
 	new := "line1\nline3"
 
@@ -38,6 +40,7 @@ func TestGenerateDiffString_BasicRemove(t *testing.T) {
 }
 
 func TestGenerateDiffString_Replace(t *testing.T) {
+	t.Parallel()
 	old := "line1\nold\nline3"
 	new := "line1\nnew\nline3"
 
@@ -51,6 +54,7 @@ func TestGenerateDiffString_Replace(t *testing.T) {
 }
 
 func TestGenerateDiffString_NoChange(t *testing.T) {
+	t.Parallel()
 	content := "line1\nline2\nline3"
 	result := GenerateDiffString(content, content, 4)
 	if result.Diff != "" {
@@ -62,6 +66,7 @@ func TestGenerateDiffString_NoChange(t *testing.T) {
 }
 
 func TestGenerateDiffString_ContextLines(t *testing.T) {
+	t.Parallel()
 	// Build a file with many lines, change one in the middle
 	var oldLines, newLines []string
 	for i := 0; i < 20; i++ {
@@ -84,6 +89,7 @@ func TestGenerateDiffString_ContextLines(t *testing.T) {
 }
 
 func TestGenerateDiffString_FirstChangedLine(t *testing.T) {
+	t.Parallel()
 	old := "line1\nline2\nline3\nline4"
 	new := "line1\nline2\nCHANGED\nline4"
 
@@ -97,6 +103,7 @@ func TestGenerateDiffString_FirstChangedLine(t *testing.T) {
 }
 
 func TestComputeDiffParts_EmptyToContent(t *testing.T) {
+	t.Parallel()
 	parts := computeDiffParts([]string{}, []string{"a", "b"})
 	if len(parts) == 0 {
 		t.Fatal("expected parts")
@@ -113,6 +120,7 @@ func TestComputeDiffParts_EmptyToContent(t *testing.T) {
 }
 
 func TestComputeDiffParts_ContentToEmpty(t *testing.T) {
+	t.Parallel()
 	parts := computeDiffParts([]string{"a", "b"}, []string{})
 	removedCount := 0
 	for _, p := range parts {
@@ -126,6 +134,7 @@ func TestComputeDiffParts_ContentToEmpty(t *testing.T) {
 }
 
 func TestComputeDiffParts_Identical(t *testing.T) {
+	t.Parallel()
 	lines := []string{"a", "b", "c"}
 	parts := computeDiffParts(lines, lines)
 	for _, p := range parts {
@@ -136,6 +145,7 @@ func TestComputeDiffParts_Identical(t *testing.T) {
 }
 
 func TestSimpleDiffParts_SharedPrefixAndSuffix(t *testing.T) {
+	t.Parallel()
 	old := []string{"a", "b", "c", "d", "e"}
 	new := []string{"a", "b", "X", "d", "e"}
 

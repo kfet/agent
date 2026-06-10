@@ -9,6 +9,7 @@ import (
 )
 
 func TestWriteTool_NewFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -37,6 +38,7 @@ func TestWriteTool_NewFile(t *testing.T) {
 }
 
 func TestWriteTool_OverwriteFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("old content"), 0644)
 
@@ -59,6 +61,7 @@ func TestWriteTool_OverwriteFile(t *testing.T) {
 }
 
 func TestWriteTool_CreateDirectories(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -80,6 +83,7 @@ func TestWriteTool_CreateDirectories(t *testing.T) {
 }
 
 func TestWriteTool_AbsolutePath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 	absPath := filepath.Join(dir, "abs.txt")
@@ -102,6 +106,7 @@ func TestWriteTool_AbsolutePath(t *testing.T) {
 }
 
 func TestWriteTool_EmptyContent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -123,6 +128,7 @@ func TestWriteTool_EmptyContent(t *testing.T) {
 }
 
 func TestWriteTool_MissingPath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -135,6 +141,7 @@ func TestWriteTool_MissingPath(t *testing.T) {
 }
 
 func TestWriteTool_Cancelled(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -151,6 +158,7 @@ func TestWriteTool_Cancelled(t *testing.T) {
 }
 
 func TestWriteTool_ByteCount(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := NewWriteTool(dir)
 
@@ -169,6 +177,7 @@ func TestWriteTool_ByteCount(t *testing.T) {
 }
 
 func TestWriteToolWithWriter_DelegatesAbsolutePath(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	var gotPath, gotContent string
 	writeFn := WriteFileFn(func(_ context.Context, path, content string) error {
@@ -197,6 +206,7 @@ func TestWriteToolWithWriter_DelegatesAbsolutePath(t *testing.T) {
 }
 
 func TestWriteToolWithWriter_EmptyPathReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeFn := WriteFileFn(func(_ context.Context, _, _ string) error { return nil })
 	tool := NewWriteToolWithWriter(dir, writeFn)
@@ -209,6 +219,7 @@ func TestWriteToolWithWriter_EmptyPathReturnsError(t *testing.T) {
 }
 
 func TestWriteToolWithWriter_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeFn := WriteFileFn(func(_ context.Context, _, _ string) error { return nil })
 	tool := NewWriteToolWithWriter(dir, writeFn)
@@ -223,6 +234,7 @@ func TestWriteToolWithWriter_ContextCancellation(t *testing.T) {
 }
 
 func TestWriteToolWithWriter_BytesWrittenMessage(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeFn := WriteFileFn(func(_ context.Context, _, _ string) error { return nil })
 	tool := NewWriteToolWithWriter(dir, writeFn)

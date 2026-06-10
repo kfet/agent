@@ -28,6 +28,7 @@ func writePNG(t *testing.T, path string, w, h int) {
 }
 
 func TestExecuteRead_ReadFileError(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses file permissions")
 	}
@@ -42,11 +43,13 @@ func TestExecuteRead_ReadFileError(t *testing.T) {
 }
 
 func TestReadImage_ReadFileError(t *testing.T) {
+	t.Parallel()
 	_, err := readImage(filepath.Join(t.TempDir(), "ghost.png"), "ghost.png", "image/png")
 	require.Error(t, err)
 }
 
 func TestReadImage_ResizeDimensionNote(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "big.png")
 	writePNG(t, p, 2100, 20) // wider than 2000 -> resized -> dimension note
@@ -56,12 +59,14 @@ func TestReadImage_ResizeDimensionNote(t *testing.T) {
 }
 
 func TestReadTextPartial_OpenError(t *testing.T) {
+	t.Parallel()
 	zero := 1
 	_, err := readTextPartial(filepath.Join(t.TempDir(), "ghost.txt"), "ghost.txt", &zero, nil)
 	require.Error(t, err)
 }
 
 func TestReadTextPartial_OffsetZeroClamps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	require.NoError(t, os.WriteFile(f, []byte("one\ntwo\nthree\n"), 0o644))
@@ -73,6 +78,7 @@ func TestReadTextPartial_OffsetZeroClamps(t *testing.T) {
 }
 
 func TestReadTextPartial_ScannerError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "huge.txt")
 	// A single line larger than the 1MB scanner buffer triggers scanner.Err.
@@ -84,6 +90,7 @@ func TestReadTextPartial_ScannerError(t *testing.T) {
 }
 
 func TestReadTool_PartialLineCapAndTruncation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "many.txt")
 	var b strings.Builder
@@ -98,6 +105,7 @@ func TestReadTool_PartialLineCapAndTruncation(t *testing.T) {
 }
 
 func TestFormatPartialRead_FirstLineExceedsBytes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "wide.txt")
 	require.NoError(t, os.WriteFile(f, []byte(strings.Repeat("a", 60*1024)+"\n"), 0o644))
@@ -108,6 +116,7 @@ func TestFormatPartialRead_FirstLineExceedsBytes(t *testing.T) {
 }
 
 func TestFormatPartialRead_TruncatedByBytes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "exact.txt")
 	// First line == DefaultMaxBytes (not >), so byteCount = limit+1 > limit.
@@ -119,6 +128,7 @@ func TestFormatPartialRead_TruncatedByBytes(t *testing.T) {
 }
 
 func TestFormatPartialRead_ByteBreakMidLoop(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "chunks.txt")
 	var b strings.Builder
@@ -136,6 +146,7 @@ func TestFormatPartialRead_ByteBreakMidLoop(t *testing.T) {
 // applyReadFilters branches, reached via NewReadToolWithReader which calls it
 // directly with caller-supplied offset/limit.
 func TestApplyReadFilters_OffsetZeroClamps(t *testing.T) {
+	t.Parallel()
 	readFn := func(_ context.Context, _ string) (string, error) { return "a\nb\nc", nil }
 	tool := NewReadToolWithReader(t.TempDir(), readFn)
 	res, err := tool.Execute(context.Background(), "c", map[string]any{"path": "f.txt", "offset": float64(0), "limit": float64(2)}, nil)
@@ -144,6 +155,7 @@ func TestApplyReadFilters_OffsetZeroClamps(t *testing.T) {
 }
 
 func TestApplyReadFilters_OffsetBeyondEOF(t *testing.T) {
+	t.Parallel()
 	readFn := func(_ context.Context, _ string) (string, error) { return "a\nb", nil }
 	tool := NewReadToolWithReader(t.TempDir(), readFn)
 	_, err := tool.Execute(context.Background(), "c", map[string]any{"path": "f.txt", "offset": float64(100)}, nil)
@@ -152,6 +164,7 @@ func TestApplyReadFilters_OffsetBeyondEOF(t *testing.T) {
 }
 
 func TestApplyReadFilters_LimitClampsEndLine(t *testing.T) {
+	t.Parallel()
 	readFn := func(_ context.Context, _ string) (string, error) { return "a\nb\nc", nil }
 	tool := NewReadToolWithReader(t.TempDir(), readFn)
 	res, err := tool.Execute(context.Background(), "c", map[string]any{"path": "f.txt", "limit": float64(100)}, nil)
@@ -160,6 +173,7 @@ func TestApplyReadFilters_LimitClampsEndLine(t *testing.T) {
 }
 
 func TestApplyReadFilters_FirstLineExceedsLimit(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("a", 60*1024)
 	readFn := func(_ context.Context, _ string) (string, error) { return long + "\nmore", nil }
 	tool := NewReadToolWithReader(t.TempDir(), readFn)
@@ -169,6 +183,7 @@ func TestApplyReadFilters_FirstLineExceedsLimit(t *testing.T) {
 }
 
 func TestApplyReadFilters_TruncatedByBytes(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for i := 0; i < 6; i++ {
 		b.WriteString(strings.Repeat("z", 20*1024))
@@ -183,6 +198,7 @@ func TestApplyReadFilters_TruncatedByBytes(t *testing.T) {
 }
 
 func TestApplyReadFilters_UserLimitRemaining(t *testing.T) {
+	t.Parallel()
 	readFn := func(_ context.Context, _ string) (string, error) { return "a\nb\nc\nd\ne", nil }
 	tool := NewReadToolWithReader(t.TempDir(), readFn)
 	res, err := tool.Execute(context.Background(), "c", map[string]any{"path": "f.txt", "limit": float64(2)}, nil)
@@ -191,6 +207,7 @@ func TestApplyReadFilters_UserLimitRemaining(t *testing.T) {
 }
 
 func TestReadTool_CtxCancelled(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644))
 	ctx, cancel := context.WithCancel(context.Background())

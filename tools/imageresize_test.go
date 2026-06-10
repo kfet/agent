@@ -33,6 +33,7 @@ func createTestImage(w, h int) string {
 }
 
 func TestResizeImage_SmallImage_NoResize(t *testing.T) {
+	t.Parallel()
 	b64 := createTestImage(100, 100)
 	result := ResizeImage(b64, "image/png", nil)
 
@@ -48,6 +49,7 @@ func TestResizeImage_SmallImage_NoResize(t *testing.T) {
 }
 
 func TestResizeImage_LargeImage_Resized(t *testing.T) {
+	t.Parallel()
 	b64 := createTestImage(2100, 300)
 	result := ResizeImage(b64, "image/png", nil)
 
@@ -69,6 +71,7 @@ func TestResizeImage_LargeImage_Resized(t *testing.T) {
 }
 
 func TestResizeImage_CustomOptions(t *testing.T) {
+	t.Parallel()
 	b64 := createTestImage(500, 500)
 	result := ResizeImage(b64, "image/png", &ResizeImageOptions{
 		MaxWidth:  200,
@@ -84,6 +87,7 @@ func TestResizeImage_CustomOptions(t *testing.T) {
 }
 
 func TestResizeImage_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	result := ResizeImage("not-valid-base64!!!", "image/png", nil)
 	// Should return original data unchanged
 	if result.Data != "not-valid-base64!!!" {
@@ -95,6 +99,7 @@ func TestResizeImage_InvalidBase64(t *testing.T) {
 }
 
 func TestResizeImage_LastResortFallback(t *testing.T) {
+	t.Parallel()
 	// A 110×110 image with MaxBytes=1 forces the scale loop to exit early:
 	//   scale=1.0 → 110×110 ≥ 100 but encoded size > 1 byte → no return
 	//   scale=0.75 → 83×83 < 100 → break
@@ -128,6 +133,7 @@ func TestResizeImage_LastResortFallback(t *testing.T) {
 }
 
 func TestFormatDimensionNote(t *testing.T) {
+	t.Parallel()
 	// Not resized
 	r := ResizedImage{WasResized: false}
 	if note := FormatDimensionNote(r); note != "" {

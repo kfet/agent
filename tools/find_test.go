@@ -18,6 +18,7 @@ func execFind(t *testing.T, tool agent.AgentTool, params map[string]any) (agent.
 }
 
 func TestFindTool_BasicGlob(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte(""), 0644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte(""), 0644)
@@ -41,6 +42,7 @@ func TestFindTool_BasicGlob(t *testing.T) {
 }
 
 func TestFindTool_NoMatches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte(""), 0644)
 
@@ -55,6 +57,7 @@ func TestFindTool_NoMatches(t *testing.T) {
 }
 
 func TestFindTool_SubdirectorySearch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
 	os.Mkdir(sub, 0755)
@@ -77,6 +80,7 @@ func TestFindTool_SubdirectorySearch(t *testing.T) {
 }
 
 func TestFindTool_NonexistentPath(t *testing.T) {
+	t.Parallel()
 	tool := NewFindTool("/tmp")
 	_, err := execFind(t, tool, map[string]any{"pattern": "*.txt", "path": "/nonexistent/path"})
 	if err == nil {
@@ -85,6 +89,7 @@ func TestFindTool_NonexistentPath(t *testing.T) {
 }
 
 func TestFindTool_EmptyPattern(t *testing.T) {
+	t.Parallel()
 	tool := NewFindTool("/tmp")
 	_, err := execFind(t, tool, map[string]any{"pattern": ""})
 	if err == nil {
@@ -93,6 +98,7 @@ func TestFindTool_EmptyPattern(t *testing.T) {
 }
 
 func TestFindTool_Cancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte(""), 0644)
 
@@ -107,6 +113,7 @@ func TestFindTool_Cancellation(t *testing.T) {
 }
 
 func TestFindTool_WithSearchDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "mydir")
 	os.Mkdir(sub, 0755)

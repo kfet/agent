@@ -18,6 +18,7 @@ func execGrep(t *testing.T, tool agent.AgentTool, params map[string]any) (agent.
 }
 
 func TestGrepTool_BasicSearch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello world\nfoo bar\n"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("baz qux\nhello again\n"), 0644)
@@ -41,6 +42,7 @@ func TestGrepTool_BasicSearch(t *testing.T) {
 }
 
 func TestGrepTool_NoMatches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello world\n"), 0644)
 
@@ -55,6 +57,7 @@ func TestGrepTool_NoMatches(t *testing.T) {
 }
 
 func TestGrepTool_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Hello World\n"), 0644)
 
@@ -69,6 +72,7 @@ func TestGrepTool_CaseInsensitive(t *testing.T) {
 }
 
 func TestGrepTool_LiteralSearch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("foo.bar\nfoo*bar\n"), 0644)
 
@@ -84,6 +88,7 @@ func TestGrepTool_LiteralSearch(t *testing.T) {
 }
 
 func TestGrepTool_GlobFilter(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.go"), []byte("hello\n"), 0644)
@@ -100,6 +105,7 @@ func TestGrepTool_GlobFilter(t *testing.T) {
 }
 
 func TestGrepTool_NonexistentPath(t *testing.T) {
+	t.Parallel()
 	tool := NewGrepTool("/tmp")
 	_, err := execGrep(t, tool, map[string]any{"pattern": "test", "path": "/nonexistent/path"})
 	if err == nil {
@@ -108,6 +114,7 @@ func TestGrepTool_NonexistentPath(t *testing.T) {
 }
 
 func TestGrepTool_EmptyPattern(t *testing.T) {
+	t.Parallel()
 	tool := NewGrepTool("/tmp")
 	_, err := execGrep(t, tool, map[string]any{"pattern": ""})
 	if err == nil {
@@ -116,6 +123,7 @@ func TestGrepTool_EmptyPattern(t *testing.T) {
 }
 
 func TestGrepTool_Cancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("content\n"), 0644)
 
@@ -130,6 +138,7 @@ func TestGrepTool_Cancellation(t *testing.T) {
 }
 
 func TestGrepTool_LineNumbers(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("line1\nline2\ntarget line\nline4\n"), 0644)
 
@@ -149,6 +158,7 @@ func TestGrepTool_LineNumbers(t *testing.T) {
 // These test the grep(1) fallback used when ripgrep is not available.
 
 func TestGrepFallback_BasicSearch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello world\nfoo bar\n"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("baz qux\nhello again\n"), 0644)
@@ -164,6 +174,7 @@ func TestGrepFallback_BasicSearch(t *testing.T) {
 }
 
 func TestGrepFallback_NoMatches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello world\n"), 0644)
 
@@ -177,6 +188,7 @@ func TestGrepFallback_NoMatches(t *testing.T) {
 }
 
 func TestGrepFallback_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("Hello World\n"), 0644)
 
@@ -190,6 +202,7 @@ func TestGrepFallback_CaseInsensitive(t *testing.T) {
 }
 
 func TestGrepFallback_Literal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("foo.bar\nfooXbar\n"), 0644)
 
@@ -205,6 +218,7 @@ func TestGrepFallback_Literal(t *testing.T) {
 }
 
 func TestGrepFallback_GlobFilter(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.go"), []byte("hello\n"), 0644)
@@ -220,6 +234,7 @@ func TestGrepFallback_GlobFilter(t *testing.T) {
 }
 
 func TestGrepFallback_Limit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	var content strings.Builder
 	for i := 0; i < 100; i++ {
@@ -243,6 +258,7 @@ func TestGrepFallback_Limit(t *testing.T) {
 }
 
 func TestGrepFallback_SingleFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.txt")
 	os.WriteFile(filePath, []byte("hello world\nfoo bar\nhello again\n"), 0644)
@@ -258,6 +274,7 @@ func TestGrepFallback_SingleFile(t *testing.T) {
 }
 
 func TestGrepTool_SingleFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello world\nfoo bar\nhello again\n"), 0644)
 
