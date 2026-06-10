@@ -108,7 +108,7 @@ func TestExecuteBash_ByteTruncationNotice(t *testing.T) {
 // TestExecuteBash_TimeoutWithOutput hits the deadline path after some output
 // has already been produced.
 func TestExecuteBash_TimeoutWithOutput(t *testing.T) {
-	_, err := executeBash(context.Background(), "echo started; sleep 10", t.TempDir(), time.Second)
+	_, err := executeBash(context.Background(), "echo started; sleep 10", t.TempDir(), 200*time.Millisecond)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "started")
 	require.Contains(t, err.Error(), "timed out")

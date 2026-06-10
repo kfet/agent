@@ -55,7 +55,7 @@ func TestBashTool_Timeout(t *testing.T) {
 	tool := NewBashTool(t.TempDir())
 	_, err := tool.Execute(context.Background(), "call-1", map[string]any{
 		"command": "sleep 10",
-		"timeout": float64(1),
+		"timeout": 0.2,
 	}, nil)
 	if err == nil {
 		t.Fatal("expected error for timeout")
@@ -98,10 +98,10 @@ func TestBashTool_ExplicitTimeoutOverridesDefault(t *testing.T) {
 	DefaultBashTimeout = 50 * time.Millisecond
 
 	tool := NewBashTool(t.TempDir())
-	// Sleep 300ms, but pass an explicit 5s timeout > default 50ms.
+	// Sleep 100ms, but pass an explicit 5s timeout > default 50ms.
 	// Should succeed, not time out.
 	_, err := tool.Execute(context.Background(), "call-1", map[string]any{
-		"command": "sleep 0.3",
+		"command": "sleep 0.1",
 		"timeout": float64(5),
 	}, nil)
 	if err != nil {
