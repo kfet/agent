@@ -38,7 +38,7 @@ func TestExecuteRead_ReadFileError(t *testing.T) {
 	require.NoError(t, os.Chmod(f, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(f, 0o644) })
 	// Stat succeeds (dir traversable) but ReadFile fails (no read perm).
-	_, err := executeRead(f, dir, nil, nil)
+	_, err := executeRead(f, dir, nil, nil, "")
 	require.Error(t, err)
 }
 

@@ -23,7 +23,7 @@ func TestExecuteBash_PipeError(t *testing.T) {
 	t.Cleanup(func() { newOSPipe = orig })
 	newOSPipe = func() (*os.File, *os.File, error) { return nil, nil, errors.New("boom") }
 
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second)
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pipe")
 }
@@ -31,7 +31,7 @@ func TestExecuteBash_PipeError(t *testing.T) {
 // TestExecuteBash_StartError forces cmd.Start to fail by removing bash from PATH.
 func TestExecuteBash_StartError(t *testing.T) {
 	t.Setenv("PATH", "")
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second)
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
 	require.Error(t, err)
 }
 
@@ -67,7 +67,7 @@ func TestExecuteBash_DrainGraceFallback(t *testing.T) {
 		return pr, pw, nil
 	}
 
-	res, err := executeBash(context.Background(), "echo foreground", t.TempDir(), 5*time.Second)
+	res, err := executeBash(context.Background(), "echo foreground", t.TempDir(), 5*time.Second, "")
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "foreground")
 }
@@ -81,7 +81,7 @@ func TestExecuteBash_GenericWaitError(t *testing.T) {
 		_, _ = p.Wait() // reap for real so we don't leak a zombie
 		return nil, errors.New("synthetic wait failure")
 	}
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), 5*time.Second)
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), 5*time.Second, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "synthetic wait failure")
 }
@@ -91,7 +91,7 @@ func TestExecuteBash_TruncationNotice(t *testing.T) {
 	t.Parallel()
 	// Produce more than DefaultMaxLines lines to trigger line truncation.
 	res, err := executeBash(context.Background(),
-		"for i in $(seq 1 2500); do echo line$i; done", t.TempDir(), 30*time.Second)
+		"for i in $(seq 1 2500); do echo line$i; done", t.TempDir(), 30*time.Second, "")
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "Full output:")
 }
@@ -103,7 +103,7 @@ func TestExecuteBash_ByteTruncationNotice(t *testing.T) {
 	// 10 lines of ~8KB each = ~80KB > 50KB byte budget, but only 10 lines.
 	res, err := executeBash(context.Background(),
 		"for i in $(seq 1 10); do head -c 8000 /dev/zero | tr '\\0' a; echo; done",
-		t.TempDir(), 30*time.Second)
+		t.TempDir(), 30*time.Second, "")
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "KB limit). Full output:")
 }
@@ -112,7 +112,7 @@ func TestExecuteBash_ByteTruncationNotice(t *testing.T) {
 // has already been produced.
 func TestExecuteBash_TimeoutWithOutput(t *testing.T) {
 	t.Parallel()
-	_, err := executeBash(context.Background(), "echo started; sleep 10", t.TempDir(), 200*time.Millisecond)
+	_, err := executeBash(context.Background(), "echo started; sleep 10", t.TempDir(), 200*time.Millisecond, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "started")
 	require.Contains(t, err.Error(), "timed out")
@@ -127,7 +127,7 @@ func TestExecuteBash_CancelWithOutput(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
-	_, err := executeBash(ctx, "echo started; sleep 10", t.TempDir(), 5*time.Second)
+	_, err := executeBash(ctx, "echo started; sleep 10", t.TempDir(), 5*time.Second, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "started")
 	require.Contains(t, err.Error(), "aborted")

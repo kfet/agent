@@ -3,7 +3,7 @@ module github.com/kfet/agent
 go 1.24.0
 
 require (
-	github.com/kfet/ai v0.1.0
+	github.com/kfet/ai v0.1.2
 	github.com/kfet/pinexec v0.0.4
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.36.0

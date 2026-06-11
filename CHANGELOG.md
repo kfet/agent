@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-11
+
+### Added
+
+- Tool-result `Meta` channel: `AgentToolResult` now carries an optional
+  `Meta map[string]string` of small, structured metadata the LLM should
+  see alongside the content. The agent loop copies it onto
+  `ai.ToolResultMessage.Meta`, where the provider transform renders it
+  for the provider-bound message only (internal consumers that join
+  content blocks never see it). Forward-ported from fir to keep the
+  extracted runtime in parity.
+- `if_hash` confirm-unchanged opt-in on the `bash` and `read` tools:
+  every full read / command result carries a content `hash` (surfaced
+  via `Meta{hash}`); passing `if_hash` returns a tiny `unchanged` stub
+  when the content still matches, else the full body/output. Partial
+  (offset/limit) reads carry no hash and ignore `if_hash`. Tool
+  descriptions nudge `read` over `cat`/`sed`/`head`/`tail` and
+  `edit`/`write` over `sed -i`/heredoc rewrites.
+
+### Changed
+
+- Bumped the `github.com/kfet/ai` dependency to v0.1.2 (provides
+  `ToolResultMessage.Meta` and `RenderToolResultMeta`).
+
 ## [0.1.0] - 2026-06-10
 
 ### Breaking

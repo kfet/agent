@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,64 @@ func TestBashTool_Echo(t *testing.T) {
 	}
 	if !strings.Contains(result.Content[0].Text, "hello") {
 		t.Errorf("output = %q, want contains hello", result.Content[0].Text)
+	}
+	if !regexp.MustCompile(`^[0-9a-f]{16}$`).MatchString(result.Meta["hash"]) {
+		t.Errorf("expected hash meta, got %q", result.Meta["hash"])
+	}
+}
+
+func TestBashTool_IfHashMatchReturnsStub(t *testing.T) {
+	tool := NewBashTool(t.TempDir())
+	// First run learns the hash.
+	r1, err := tool.Execute(context.Background(), "c1", map[string]any{"command": "echo stable"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d1, _ := r1.Details.(map[string]any)
+	hash, _ := d1["hash"].(string)
+	if hash == "" {
+		t.Fatalf("expected hash detail, got %+v", r1.Details)
+	}
+	// Re-run with matching if_hash: command still executes, output matches -> stub.
+	r2, err := tool.Execute(context.Background(), "c2", map[string]any{"command": "echo stable", "if_hash": hash}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d2, _ := r2.Details.(map[string]any)
+	if d2["unchanged"] != true || d2["hash"] != hash {
+		t.Fatalf("expected unchanged stub, got %+v", r2.Details)
+	}
+	if strings.Contains(r2.Content[0].Text, "stable\n") {
+		t.Errorf("stub should not contain full output: %q", r2.Content[0].Text)
+	}
+}
+
+func TestBashTool_IfHashMismatchReturnsFresh(t *testing.T) {
+	tool := NewBashTool(t.TempDir())
+	r, err := tool.Execute(context.Background(), "c1", map[string]any{"command": "echo fresh", "if_hash": "0000000000000000"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.Content[0].Text, "fresh") {
+		t.Errorf("expected fresh output, got %q", r.Content[0].Text)
+	}
+	d, _ := r.Details.(map[string]any)
+	if d["unchanged"] == true || d["hash"] == "" {
+		t.Fatalf("expected fresh result with hash, got %+v", r.Details)
+	}
+}
+
+func TestBashTool_IfHashChangedOutput(t *testing.T) {
+	tool := NewBashTool(t.TempDir())
+	r1, _ := tool.Execute(context.Background(), "c1", map[string]any{"command": "date +%s%N"}, nil)
+	hash := r1.Details.(map[string]any)["hash"].(string)
+	// Different output -> command runs, hash differs -> fresh output returned.
+	r2, err := tool.Execute(context.Background(), "c2", map[string]any{"command": "echo definitely-different", "if_hash": hash}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r2.Content[0].Text, "definitely-different") {
+		t.Errorf("expected fresh output, got %q", r2.Content[0].Text)
 	}
 }
 
