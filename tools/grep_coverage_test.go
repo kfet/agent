@@ -198,3 +198,39 @@ func TestGrepFallback_ByteTruncation(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, res.Content[0].Text, "limit reached")
 }
+
+// TestGrepTool_RipgrepHandlerPath drives the full tool through the ripgrep
+// branch (handler -> grepWithRipgrep, line ~142) with ignoreCase/literal/glob
+// all set, covering the flag-append branches. A fake `rg` is placed on PATH so
+// the path is exercised deterministically even where ripgrep is not installed
+// (e.g. CI). /usr/bin:/bin stay on PATH so the fake script can find `cat`.
+func TestGrepTool_RipgrepHandlerPath(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "a.txt")
+	require.NoError(t, os.WriteFile(f, []byte("needle\n"), 0o644))
+	rg := fakeRg(t, rgMatch(f, 1)+"\n")
+	t.Setenv("PATH", filepath.Dir(rg)+":/usr/bin:/bin")
+	tool := NewGrepTool(dir)
+	res, err := tool.Execute(context.Background(), "c", map[string]any{
+		"pattern":    "needle",
+		"ignoreCase": true,
+		"literal":    true,
+		"glob":       "*.txt",
+	}, nil)
+	require.NoError(t, err)
+	require.Contains(t, res.Content[0].Text, "needle")
+}
+
+// TestGrepWithRipgrep_PathOutsideSearchDir exercises formatPath's base-name
+// fallback (line ~241): when a match path is not under searchPath, filepath.Rel
+// yields a "../" path and we fall back to filepath.Base.
+func TestGrepWithRipgrep_PathOutsideSearchDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "z.txt")
+	require.NoError(t, os.WriteFile(outside, []byte("hit\n"), 0o644))
+	rg := fakeRg(t, rgMatch(outside, 1)+"\n")
+	res, err := grepWithRipgrep(context.Background(), rg, "hit", dir, true, false, false, "", 0, 100)
+	require.NoError(t, err)
+	require.Contains(t, res.Content[0].Text, filepath.Base(outside))
+}
