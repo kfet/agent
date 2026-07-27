@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-27
+
+### Fixed
+
+- **bash tool description: corrected the process-cleanup claim.** It said daemons
+  detaching via `setsid` **or double-fork** escape the post-command cleanup. The
+  double-fork half is false: cleanup is a process-**group** kill, and `fork()`
+  preserves the process group, so a double-forked child is reparented to init and
+  killed anyway. Only `setsid` allocates a new group. The cited examples (tmux
+  server, sshd, dockerd) escape because they call `setsid()`, not because they
+  fork twice. Also noted that `setsid` does not leave the **cgroup**, so a systemd
+  unit restart still tears down "detached" children. Rewritten to state the
+  underlying rule rather than enumerate consequences. Verified empirically; the
+  in-code comment at bash.go:183 was already correct.
+
 ## [0.1.1] - 2026-06-11
 
 ### Added
