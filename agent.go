@@ -803,7 +803,17 @@ func (a *Agent) SimplePromptStream(ctx context.Context, messages []AgentMessage,
 		msg = streamSinglePrompt(ctx, systemPrompt, messages, config, streamFn, onEvent)
 
 		switch {
-		case msg.ErrorMessage != "":
+		case msg.StopReason == ai.StopReasonError || msg.ErrorMessage != "":
+			// "This turn errored" is the stop reason; the presence of error
+			// text was only ever a proxy for it. Keyed on the text alone, a
+			// message that errored without saying why fell through to the
+			// degenerate-content arm below, got re-rolled three times with
+			// thinking forced off, and surfaced as "no usable content" —
+			// destroying the provider's actual diagnosis. streamAssistantResponse
+			// already enforces the non-empty-ErrorMessage invariant at the
+			// agent boundary; re-applying it here means a future regression
+			// upstream still yields a diagnosable error on the FIRST attempt.
+			msg = ensureErrorMessage(msg)
 			lastErr = fmt.Errorf("%s", msg.ErrorMessage)
 			// Only transport/stream errors are worth a re-roll; a genuine
 			// model/API rejection (400, auth, context-length) is terminal.

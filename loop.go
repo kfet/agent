@@ -653,7 +653,7 @@ func streamAssistantResponse(
 			}
 
 		case ai.EventDone, ai.EventError:
-			finalMsg := stream.Result()
+			finalMsg := ensureErrorMessage(stream.Result())
 			if finalMsg == nil {
 				finalMsg = errorAssistantMessage(config.Model, "stream ended without result")
 			}
@@ -678,7 +678,7 @@ func streamAssistantResponse(
 	}
 
 	// Should not reach here normally
-	result := stream.Result()
+	result := ensureErrorMessage(stream.Result())
 	if result == nil {
 		return errorAssistantMessage(config.Model, "stream ended unexpectedly")
 	}
@@ -797,6 +797,40 @@ func executeToolCalls(
 	shouldTerminate := len(toolCalls) > 0 && allTerminate
 
 	return executedToolCallBatch{messages: results, terminate: shouldTerminate}
+}
+
+// ensureErrorMessage enforces the invariant that an assistant message with
+// StopReason error always carries a non-empty ErrorMessage.
+//
+// StreamFn is an injected dependency: provider implementations live outside
+// this module, so their output is untrusted input at the agent boundary. A
+// provider that reports an error stop reason without any error text destroys
+// the only diagnosis the caller has — and, worse, makes a genuine API
+// rejection indistinguishable from a degenerate (empty) generation, so
+// callers retry it instead of surfacing it.
+//
+// When the message errored but said nothing, synthesise an honest,
+// diagnosable substitute from what is actually known (provider, model, stop
+// reason, content block summary). Nothing is invented: no status code or
+// error class is fabricated. The text deliberately avoids any phrase matched
+// by ai.IsRetryableError, so the synthesised error is terminal rather than
+// re-rolled.
+//
+// The message is shallow-copied rather than mutated in place: the pointer is
+// owned by the provider's stream and may still be referenced by the producer
+// goroutine.
+func ensureErrorMessage(m *ai.AssistantMessage) *ai.AssistantMessage {
+	if m == nil || m.StopReason != ai.StopReasonError || strings.TrimSpace(m.ErrorMessage) != "" {
+		return m
+	}
+	fixed := *m
+	fixed.ErrorMessage = fmt.Sprintf(
+		"provider reported stop_reason=error with no error message (provider=%s model=%s blocks: %s)",
+		m.Provider, m.Model, formatBlockSummary(SummarizeBlocks(m.Content)),
+	)
+	slog.Warn("provider returned an error stop reason with no error message",
+		"provider", m.Provider, "model", m.Model, "contentBlocks", len(m.Content))
+	return &fixed
 }
 
 // errorAssistantMessage creates an error assistant message.

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A provider error is no longer flattened into "response had no usable
+  content". `StreamFn` is an injected dependency, so provider output is
+  untrusted input at the agent boundary — and at least one provider path
+  reports `StopReason == StopReasonError` while leaving `ErrorMessage`
+  empty. `streamAssistantResponse` now enforces the invariant that an
+  assistant message with an error stop reason always carries a non-empty
+  `ErrorMessage`, synthesising an honest, diagnosable substitute (provider,
+  model, stop reason, content-block summary) when the provider says
+  nothing. Nothing is invented: no status code or error class is
+  fabricated, and the synthesised text deliberately matches none of the
+  `ai.IsRetryableError` patterns, so it stays terminal. The invariant now
+  holds for the returned message, the message stored in agent history, and
+  the emitted `EventMessageStart` / `EventMessageEnd` events.
+- `SimplePrompt` / `SideQuery` now classify a turn as errored by its stop
+  reason (`StopReason == StopReasonError`) as well as by non-empty
+  `ErrorMessage`. Previously a blank-error message fell through to the
+  degenerate-generation arm, was re-rolled three times with thinking forced
+  off, and surfaced as `response had no usable content (blocks: [])
+  (stop_reason=error)` — destroying the provider's diagnosis and burning
+  three round trips. Such a call now fails on the FIRST attempt with a
+  diagnosable message. Retry semantics are otherwise unchanged: only
+  `ai.IsRetryableError` transport/rate-limit classes are re-rolled.
+
 ## [0.1.2] - 2026-07-27
 
 ### Fixed
