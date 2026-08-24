@@ -1,5 +1,9 @@
 .PHONY: all check fmt fmtcheck vet staticcheck _staticcheck run-tests open_coverage clean
 
+# Coverage gate. Pinned as a `tool` directive in go.mod (`go get -tool`), so the
+# version is tracked there rather than inline here.
+COVGATE := go tool covgate
+
 # Quiet runner: $(call RUN,label,cmd) — runs cmd silently, prints "✓ label" on
 # success, dumps captured output and exits non-zero on failure. Set V=1 for
 # verbose output.
@@ -61,7 +65,7 @@ _staticcheck:
 run-tests: check
 	@go clean -testcache
 	$(call RUN,tests pass,go test -race -shuffle=on -cover ./... -coverprofile=coverage.tmp.out)
-	$(call RUN,coverage clean,go run github.com/kfet/covgate/cmd/covgate@v0.1.0 -profile=coverage.tmp.out -out=coverage.out -ignore=.covignore -min=100)
+	$(call RUN,coverage clean,$(COVGATE) -profile=coverage.tmp.out -out=coverage.out -ignore=.covignore -min=100)
 	@rm -f coverage.tmp.out
 
 open_coverage:

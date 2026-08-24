@@ -2,6 +2,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/kfet/ai v0.1.2 h1:LtiMkQA/GWNPQVywH2GUPvKGNCRgVcW4eVmWgY0jP7s=
 github.com/kfet/ai v0.1.2/go.mod h1:ori1yLW6C08jojmvil0re/K8by2LMslDPoZZZgrcpwk=
+github.com/kfet/covgate v0.1.2 h1:29q7vN+GJ8cJeXdDwohaqAT02cCZA4HlEkzjVq0MuAA=
+github.com/kfet/covgate v0.1.2/go.mod h1:M1BHQum2HvbavZoKfnIm8qBUjPDsOb0QLFtkF0OLzlM=
 github.com/kfet/pinexec v0.0.4 h1:TQuS/QQXAbjGLra1fiyrl4WHvUnhcCPIj4/sVkAAf0Q=
 github.com/kfet/pinexec v0.0.4/go.mod h1:z/u8gV5W0cXbtdO7ri/PcCCn340gZwzLntm5ruFargk=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
