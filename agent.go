@@ -530,6 +530,19 @@ func (a *Agent) GetAndClearFollowUpQueue() []AgentMessage {
 	return q
 }
 
+// TakeQueues atomically returns and clears both the steering and follow-up
+// queues. Callers that are about to discard the agent's history (e.g. a
+// session restart) use it before Abort so queued messages are neither
+// drained into the aborted run nor lost: the caller can re-queue them on
+// the fresh session. Both slices preserve enqueue order; either may be nil.
+func (a *Agent) TakeQueues() (steering, followUp []AgentMessage) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	steering, followUp = a.steeringQueue, a.followUpQueue
+	a.steeringQueue, a.followUpQueue = nil, nil
+	return steering, followUp
+}
+
 // ClearAllQueues clears both steering and follow-up queues.
 func (a *Agent) ClearAllQueues() {
 	a.mu.Lock()

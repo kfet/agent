@@ -152,7 +152,13 @@ func TestGrepTool_ContextAndLimitClamp(t *testing.T) {
 func TestGrepTool_FallbackWhenNoRipgrep(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("needle\n"), 0o644))
-	t.Setenv("PATH", "/usr/bin:/bin") // rg lives in /opt/homebrew, not here
+	// PATH holds only a real grep, so rg is unresolvable on every platform
+	// (on Linux rg often lives in /usr/bin alongside grep).
+	grepPath, err := exec.LookPath("grep")
+	require.NoError(t, err)
+	binDir := t.TempDir()
+	require.NoError(t, os.Symlink(grepPath, filepath.Join(binDir, "grep")))
+	t.Setenv("PATH", binDir)
 	tool := NewGrepTool(dir)
 	res, err := tool.Execute(context.Background(), "c", map[string]any{"pattern": "needle"}, nil)
 	require.NoError(t, err)

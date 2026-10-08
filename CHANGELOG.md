@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-08
+
+### Added
+
+- `Agent.TakeQueues()` atomically returns and clears both the steering and
+  follow-up queues (enqueue order preserved). Call it before `Abort` when the
+  history is about to be discarded (session restart) so queued messages are
+  not drained into the aborted run and can be re-queued on the fresh session.
+
+### Fixed
+
+- `TestGrepTool_FallbackWhenNoRipgrep` no longer assumes `rg` is absent from
+  `/usr/bin`; it builds a PATH containing only `grep`, so the 100% coverage
+  gate holds on Linux too.
+
 ## [0.1.3] - 2026-08-22
 
 ### Fixed

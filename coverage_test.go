@@ -84,3 +84,24 @@ func TestAgent_FollowUpQueueClearAndDrain(t *testing.T) {
 	a.ClearFollowUpQueue()
 	assert.Equal(t, 0, a.FollowUpQueueLen())
 }
+
+// TestAgent_TakeQueues covers TakeQueues: both queues are returned in
+// enqueue order and left empty, so an aborted run cannot drain them.
+func TestAgent_TakeQueues(t *testing.T) {
+	a := NewAgent(AgentOptions{})
+	s, f := a.TakeQueues()
+	assert.Nil(t, s)
+	assert.Nil(t, f)
+
+	s1 := NewAgentMessage(ai.NewUserMsg("s1", 1))
+	f1 := NewAgentMessage(ai.NewUserMsg("f1", 2))
+	f2 := NewAgentMessage(ai.NewUserMsg("f2", 3))
+	a.Steer(s1)
+	a.FollowUp(f1)
+	a.FollowUp(f2)
+
+	s, f = a.TakeQueues()
+	assert.Equal(t, []AgentMessage{s1}, s)
+	assert.Equal(t, []AgentMessage{f1, f2}, f)
+	assert.False(t, a.HasQueuedMessages())
+}
