@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-22
+
+### Changed
+
+- bash tool: the print-mode background-job note now also says "Do not detach it (no setsid, nohup, tmux, at)." In an A/B test, gpt-5.5 went from 0/2 (with one setsid escape) to 2/3 (no escapes) on "in 2 minutes create x".
+
 ## [0.5.1] - 2026-10-22
 
 ### Changed

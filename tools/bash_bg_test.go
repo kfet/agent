@@ -340,5 +340,5 @@ func TestBash_PrintModeNote(t *testing.T) {
 	res, err := executeBash(context.Background(), "sleep 5 &", t.TempDir(), 5*time.Second, "")
 	require.NoError(t, err)
 	bgMatch(t, res.Content[0].Text)
-	require.Contains(t, res.Content[0].Text, "This session ends after this turn, so the job will die.")
+	require.Contains(t, res.Content[0].Text, "This session ends after this turn, so the job will die. Run it in the foreground with a larger timeout. Do not detach it (no setsid, nohup, tmux, at).")
 }

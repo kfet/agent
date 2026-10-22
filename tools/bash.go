@@ -252,7 +252,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		bgNote = fmt.Sprintf("[background job %d: pgid %d still running%s. Read its output with bash job=%d. Killed when the session ends.]",
 			job.id, pgid, pidText, job.id)
 		if PrintMode {
-			bgNote += " This session ends after this turn, so the job will die. Run it in the foreground with a larger timeout."
+			bgNote += " This session ends after this turn, so the job will die. Run it in the foreground with a larger timeout. Do not detach it (no setsid, nohup, tmux, at)."
 		}
 	} else {
 		// Nothing left in the group. Closing the read end means any writer
