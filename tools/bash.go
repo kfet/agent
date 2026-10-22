@@ -30,6 +30,10 @@ type BashToolParams struct {
 // It is a var (not const) so tests can shorten it.
 var DefaultBashTimeout = 10 * time.Second
 
+// PrintMode marks a one-shot host session (e.g. fir -p) that ends after the
+// current turn. Background-job notes then warn that the job will die.
+var PrintMode bool
+
 // processWait isolates (*os.Process).Wait so its non-ExitError failure path
 // (the wait4 syscall can fail with EINTR/ECHILD) can be exercised in tests.
 var processWait = func(p *os.Process) (*os.ProcessState, error) { return p.Wait() }
@@ -40,7 +44,7 @@ func NewBashTool(cwd string) agent.AgentTool {
 		Tool: ai.Tool{
 			Name: "bash",
 			Description: fmt.Sprintf(
-				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. Background jobs (`&`, `nohup`, `(sleep N; cmd) &`) keep running after the call returns. The result gives a job id; read its output and status with `job=<id>`, stop it with `job=<id>, kill=true`. Jobs are killed when the session ends. For a long foreground command, pass a larger `timeout` instead. For viewing file contents, prefer the `read` tool over `cat`/`sed -n`/`head`/`tail` — `read` output is tracked and de-duplicated. For modifying files, prefer `edit`/`write` over `sed -i` / heredoc rewrites. Each result carries a `hash` of the output; the command always executes, but if you pass `if_hash` and the fresh output matches it you get back a tiny `unchanged` stub instead of the full output.",
+				"Run a bash command in the session directory (%s/%s). Returns stdout+stderr, truncated to the last %d lines or %dKB; the full output goes to a temp file. Default timeout 10s; pass `timeout` for longer commands. Background jobs (`cmd &`) keep running after the call and get a job id; read them with `job=<id>`, stop them with `kill=true`. They die when the session ends. Prefer `read` over cat/head/tail and `edit`/`write` over sed -i. Pass `if_hash` from an earlier result to get `unchanged` if the output is the same.",
 				runtime.GOOS, runtime.GOARCH, DefaultMaxLines, DefaultMaxBytes/1024,
 			),
 			Parameters: map[string]any{
@@ -48,31 +52,31 @@ func NewBashTool(cwd string) agent.AgentTool {
 				"properties": map[string]any{
 					"command": map[string]any{
 						"type":        "string",
-						"description": "Bash command to execute. Required unless `job` or `jobs` is set.",
+						"description": "Bash command. Not needed with `job` or `jobs`.",
 					},
 					"job": map[string]any{
 						"type":        "integer",
-						"description": "Background job id from an earlier result. Without `command`, returns the job's status and the output since the last read. `job=0` lists all jobs.",
+						"description": "Job id. Returns status and new output. 0 lists all jobs.",
 					},
 					"kill": map[string]any{
 						"type":        "boolean",
-						"description": "With `job`, kill that job's process group.",
+						"description": "With `job`: kill the job.",
 					},
 					"jobs": map[string]any{
 						"type":        "boolean",
-						"description": "List all background jobs.",
+						"description": "List all jobs.",
 					},
 					"timeout": map[string]any{
 						"type":        "number",
-						"description": "Timeout in seconds. Defaults to 10s if omitted; pass an explicit value to override (e.g. 60 for slower commands).",
+						"description": "Seconds. Default 10.",
 					},
 					"cwd": map[string]any{
 						"type":        "string",
-						"description": "Optional working directory to run the command in, overriding the session's default. Absolute, or relative to the session directory. Useful to recover when the session's working directory has been deleted.",
+						"description": "Run here instead of the session directory. Use it if that directory was deleted.",
 					},
 					"if_hash": map[string]any{
 						"type":        "string",
-						"description": "Optional. If you already hold this command's output, pass the `hash` from your previous run. The command always re-executes; if the fresh output still matches, you get back a tiny `unchanged` stub instead of the full output.",
+						"description": "Hash from an earlier result. Returns `unchanged` if the output is the same.",
 					},
 				},
 			},
@@ -247,6 +251,9 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		}
 		bgNote = fmt.Sprintf("[background job %d: pgid %d still running%s. Read its output with bash job=%d. Killed when the session ends.]",
 			job.id, pgid, pidText, job.id)
+		if PrintMode {
+			bgNote += " This session ends after this turn, so the job will die. Run it in the foreground with a larger timeout."
+		}
 	} else {
 		// Nothing left in the group. Closing the read end means any writer
 		// that escaped it (setsid) dies of SIGPIPE.

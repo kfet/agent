@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-22
+
+### Changed
+
+- bash tool: shorter description and parameter texts.
+- bash tool: `tools.PrintMode` (set by one-shot hosts such as `fir -p`). When it is set, the background-job note warns that the session ends after this turn and suggests running in the foreground with a larger timeout. In an A/B test, opus went from 0/2 to 2/2 on "in 2 minutes create x".
+
 ## [0.5.0] - 2026-10-22
 
 ### Added

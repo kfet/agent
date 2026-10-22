@@ -333,3 +333,12 @@ func TestExecuteBash_PipeError(t *testing.T) {
 	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
 	require.ErrorContains(t, err, "output pipe")
 }
+
+func TestBash_PrintModeNote(t *testing.T) {
+	PrintMode = true
+	t.Cleanup(func() { PrintMode = false; KillBackgroundJobs() })
+	res, err := executeBash(context.Background(), "sleep 5 &", t.TempDir(), 5*time.Second, "")
+	require.NoError(t, err)
+	bgMatch(t, res.Content[0].Text)
+	require.Contains(t, res.Content[0].Text, "This session ends after this turn, so the job will die.")
+}
