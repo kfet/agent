@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
+### Added
+
+- bash tool: output files live in one per-process log dir
+  (`$TMPDIR/agent-bash-<pid>-*`, see `tools.BashLogDir`); dirs left by dead
+  processes are removed when it is first created.
+- bash tool: a background job's log is capped at `tools.MaxBackgroundLogBytes`
+  (50MB); past the cap it is emptied and restarted with a notice line.
+- bash tool: at most `tools.MaxBackgroundJobs` (10) live background jobs; a
+  call that would exceed it fails with an error naming the running process
+  groups, and its new group is killed.
+
 ## [0.2.0] - 2026-10-22
 
 ### Changed

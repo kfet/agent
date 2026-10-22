@@ -30,9 +30,9 @@ type BashToolParams struct {
 // It is a var (not const) so tests can shorten it.
 var DefaultBashTimeout = 10 * time.Second
 
-// createOutputFile isolates os.CreateTemp so the (disk-full / EMFILE)
+// createOutputFile isolates output-file creation so the (disk-full / EMFILE)
 // failure path can be exercised in tests.
-var createOutputFile = func() (*os.File, error) { return os.CreateTemp("", "agent-bash-*.log") }
+var createOutputFile = newLogFile
 
 // readOutputFile isolates os.ReadFile for the same reason.
 var readOutputFile = os.ReadFile
@@ -224,14 +224,17 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		// Timeout/abort: the whole group goes, including background jobs.
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	} else if alive, pids := groupAlive(pgid); alive {
-		registerBackgroundJob(pgid)
+		if limitErr := registerBackgroundJob(pgid, logPath); limitErr != nil {
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			return agent.AgentToolResult{}, limitErr
+		}
 		keepLog = true
 		pidText := ""
 		if len(pids) > 0 {
 			pidText = fmt.Sprintf(" (pids %s)", joinInts(pids))
 		}
-		bgNote = fmt.Sprintf("[background: process group %d still running%s. Output continues in %s. It is killed when the session ends.]",
-			pgid, pidText, logPath)
+		bgNote = fmt.Sprintf("[background: process group %d still running%s. Output continues in %s. Capped at %dMB. It is killed when the session ends.]",
+			pgid, pidText, logPath, MaxBackgroundLogBytes>>20)
 	}
 
 	data, readErr := readOutputFile(logPath)

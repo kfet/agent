@@ -2,11 +2,13 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -14,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var bgLogRe = regexp.MustCompile(`process group (\d+) still running \(pids [\d, ]+\)\. Output continues in (\S+)\.`)
+var bgLogRe = regexp.MustCompile(`process group (\d+) still running \(pids [\d, ]+\)\. Output continues in (\S+)\. Capped`)
 
 func bgMatch(t *testing.T, text string) (int, string) {
 	t.Helper()
@@ -125,11 +127,12 @@ func TestBackgroundJobs_PrunesDead(t *testing.T) {
 	p, err := os.StartProcess("/bin/sh", cmd, &os.ProcAttr{Sys: &syscall.SysProcAttr{Setpgid: true}})
 	require.NoError(t, err)
 	_, _ = p.Wait()
-	registerBackgroundJob(p.Pid)
+	require.NoError(t, registerBackgroundJob(p.Pid, filepath.Join(t.TempDir(), "x.log")))
 	require.NotContains(t, BackgroundJobs(), p.Pid)
 }
 
 func TestGroupAlive_ProcEdgeCases(t *testing.T) {
+	KillBackgroundJobs() // quiesce monitors before touching globals
 	orig := procDir
 	t.Cleanup(func() { procDir = orig })
 	d := t.TempDir()
@@ -164,4 +167,96 @@ func TestBash_BackgroundWithNonZeroExit(t *testing.T) {
 	require.Contains(t, err.Error(), "exited with code 3")
 	_, logPath := bgMatch(t, err.Error())
 	os.Remove(logPath)
+}
+
+// useLogRoot points the session log dir at root and resets it around the test.
+func useLogRoot(t *testing.T, root string) {
+	origRoot := tempRoot
+	reset := func() { logDirOnce = sync.Once{}; logDir = ""; logDirErr = nil }
+	reset()
+	tempRoot = func() string { return root }
+	t.Cleanup(func() { tempRoot = origRoot; reset() })
+}
+
+func TestBashLogDir_PerProcessAndStaleCleanup(t *testing.T) {
+	root := t.TempDir()
+	mine := fmt.Sprintf("agent-bash-%d-old", os.Getpid())
+	for _, d := range []string{"agent-bash-999999999-dead", mine, "agent-bash-1-init", "agent-bash-nodash", "agent-bash-abc-x", "other"} {
+		require.NoError(t, os.Mkdir(filepath.Join(root, d), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "agent-bash-999999998-file"), nil, 0o600))
+	useLogRoot(t, root)
+
+	res, err := executeBash(context.Background(), "for i in $(seq 1 2500); do echo l$i; done", t.TempDir(), 10*time.Second, "")
+	require.NoError(t, err)
+	full, _ := res.Details.(map[string]any)["fullOutputPath"].(string)
+	dir, err := BashLogDir()
+	require.NoError(t, err)
+	require.Equal(t, dir, filepath.Dir(full))
+	require.True(t, strings.HasPrefix(filepath.Base(dir), fmt.Sprintf("agent-bash-%d-", os.Getpid())))
+
+	exists := func(n string) bool { _, err := os.Stat(filepath.Join(root, n)); return err == nil }
+	require.False(t, exists("agent-bash-999999999-dead"))
+	for _, n := range []string{mine, "agent-bash-1-init", "agent-bash-nodash", "agent-bash-abc-x", "other", "agent-bash-999999998-file"} {
+		require.True(t, exists(n), n)
+	}
+}
+
+func TestBashLogDir_CreateError(t *testing.T) {
+	useLogRoot(t, filepath.Join(t.TempDir(), "missing"))
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "output file")
+}
+
+func TestBackgroundLogCap(t *testing.T) {
+	KillBackgroundJobs() // quiesce monitors before touching globals
+	origMax, origPoll := MaxBackgroundLogBytes, bgPollInterval
+	t.Cleanup(func() { MaxBackgroundLogBytes, bgPollInterval = origMax, origPoll })
+	MaxBackgroundLogBytes, bgPollInterval = 1000, 10*time.Millisecond
+
+	res, err := executeBash(context.Background(),
+		"(sleep 0.2; head -c 5000 /dev/zero | tr '\\0' a; sleep 0.5; echo tail-marker; sleep 30) &", t.TempDir(), 5*time.Second, "")
+	require.NoError(t, err)
+	_, logPath := bgMatch(t, res.Content[0].Text)
+	t.Cleanup(KillBackgroundJobs)
+	eventually(t, 15*time.Second, func() bool {
+		b, _ := os.ReadFile(logPath)
+		return strings.HasPrefix(string(b), "[log exceeded") && strings.Contains(string(b), "tail-marker") && len(b) < 1000
+	})
+}
+
+func TestCapLog_EdgeCases(t *testing.T) {
+	KillBackgroundJobs() // quiesce monitors before touching globals
+	orig := MaxBackgroundLogBytes
+	t.Cleanup(func() { MaxBackgroundLogBytes = orig })
+	MaxBackgroundLogBytes = 10
+	capLog(filepath.Join(t.TempDir(), "missing")) // stat error: no-op
+	p := filepath.Join(t.TempDir(), "ro.log")
+	require.NoError(t, os.WriteFile(p, []byte(strings.Repeat("x", 100)), 0o000))
+	capLog(p) // open error: left alone
+	fi, err := os.Stat(p)
+	require.NoError(t, err)
+	if os.Geteuid() != 0 {
+		require.EqualValues(t, 100, fi.Size())
+	}
+}
+
+func TestBackgroundJobLimit(t *testing.T) {
+	orig := MaxBackgroundJobs
+	t.Cleanup(func() { MaxBackgroundJobs = orig; KillBackgroundJobs() })
+	KillBackgroundJobs()
+	MaxBackgroundJobs = 2
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		_, err := executeBash(context.Background(), "sleep 30 &", dir, 5*time.Second, "")
+		require.NoError(t, err)
+	}
+	_, err := executeBash(context.Background(), "echo $$ > P; sleep 30 &", dir, 5*time.Second, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "background job limit reached: 2 jobs already running")
+	b, _ := os.ReadFile(filepath.Join(dir, "P"))
+	pgid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	eventually(t, 5*time.Second, func() bool { a, _ := groupAlive(pgid); return !a })
+	require.Len(t, BackgroundJobs(), 2)
 }
