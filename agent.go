@@ -478,6 +478,14 @@ func (a *Agent) FollowUp(m AgentMessage) {
 	a.followUpQueue = append(a.followUpQueue, m)
 }
 
+// SteeringQueueLen returns the number of queued steering messages. Long-running
+// tools poll it to yield early so a steer is seen at the next turn boundary.
+func (a *Agent) SteeringQueueLen() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.steeringQueue)
+}
+
 // FollowUpQueueLen returns the number of queued follow-up messages.
 func (a *Agent) FollowUpQueueLen() int {
 	a.mu.Lock()

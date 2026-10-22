@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
+### Added
+
+- `Agent.SteeringQueueLen()` reports pending steering messages without draining them.
+
 ## [0.4.0] - 2026-10-22
 
 ### Changed

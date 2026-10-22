@@ -1097,3 +1097,13 @@ func TestNewAgent_AllOptionsSet(t *testing.T) {
 	assert.NotNil(t, a.compaction)
 	assert.Len(t, a.serverTools, 1)
 }
+
+func TestSteeringQueueLen(t *testing.T) {
+	a := NewAgent(AgentOptions{})
+	assert.Equal(t, 0, a.SteeringQueueLen())
+	a.Steer(AgentMessage{Message: ai.NewUserMsg("s", 0)})
+	a.FollowUp(AgentMessage{Message: ai.NewUserMsg("f", 0)})
+	assert.Equal(t, 1, a.SteeringQueueLen())
+	a.ClearSteeringQueue()
+	assert.Equal(t, 0, a.SteeringQueueLen())
+}
