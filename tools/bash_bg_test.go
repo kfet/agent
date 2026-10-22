@@ -2,13 +2,12 @@ package tools
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -16,14 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var bgLogRe = regexp.MustCompile(`process group (\d+) still running \(pids [\d, ]+\)\. Output continues in (\S+)\. Capped`)
+var bgNoteRe = regexp.MustCompile(`\[background job (\d+): pgid (\d+) still running \(pids [\d, ]+\)\. Read its output with bash job=(\d+)\. Killed when the session ends\.\]`)
 
-func bgMatch(t *testing.T, text string) (int, string) {
+func bgMatch(t *testing.T, text string) (id, pgid int) {
 	t.Helper()
-	m := bgLogRe.FindStringSubmatch(text)
+	m := bgNoteRe.FindStringSubmatch(text)
 	require.NotNil(t, m, "no background note in %q", text)
-	pgid, _ := strconv.Atoi(m[1])
-	return pgid, m[2]
+	require.Equal(t, m[1], m[3])
+	id, _ = strconv.Atoi(m[1])
+	pgid, _ = strconv.Atoi(m[2])
+	return id, pgid
 }
 
 func eventually(t *testing.T, d time.Duration, f func() bool) {
@@ -38,49 +39,104 @@ func eventually(t *testing.T, d time.Duration, f func() bool) {
 	t.Fatal("condition not met in time")
 }
 
-func TestBash_BackgroundJobSurvives(t *testing.T) {
-	dir := t.TempDir()
-	start := time.Now()
-	res, err := executeBash(context.Background(), "sleep 2 && echo late > F &", dir, 5*time.Second, "")
-	require.NoError(t, err)
-	require.Less(t, time.Since(start), time.Second)
-	pgid, logPath := bgMatch(t, res.Content[0].Text)
-	t.Cleanup(func() { KillBackgroundJobs(); os.Remove(logPath) })
-	require.Contains(t, BackgroundJobs(), pgid)
-	eventually(t, 5*time.Second, func() bool {
-		b, err := os.ReadFile(filepath.Join(dir, "F"))
-		return err == nil && string(b) == "late\n"
-	})
+// callJob drives the job forms through the real tool entry point.
+func callJob(t *testing.T, params map[string]any) (string, error) {
+	t.Helper()
+	res, err := NewBashTool(t.TempDir()).Execute(context.Background(), "id", params, nil)
+	if err != nil {
+		return "", err
+	}
+	return res.Content[0].Text, nil
 }
 
-func TestBash_NohupOutputLandsInLog(t *testing.T) {
+func fdCount(t *testing.T) int {
+	t.Helper()
+	es, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Skip("no /proc/self/fd")
+	}
+	return len(es)
+}
+
+func TestBash_BackgroundJobLateOutput(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
+	start := time.Now()
+	res, err := executeBash(context.Background(), "echo early; (sleep 1; echo late) &", t.TempDir(), 5*time.Second, "")
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), 500*time.Millisecond)
+	require.Contains(t, res.Content[0].Text, "early")
+	id, pgid := bgMatch(t, res.Content[0].Text)
+	require.Contains(t, BackgroundJobs(), pgid)
+
+	text, err := callJob(t, map[string]any{"job": float64(id)})
+	require.NoError(t, err)
+	require.Contains(t, text, "running")
+
+	time.Sleep(1500 * time.Millisecond)
+	text, err = callJob(t, map[string]any{"job": float64(id)})
+	require.NoError(t, err)
+	require.Contains(t, text, "late")
+	require.Contains(t, text, "exited")
+	require.NotContains(t, text, "early") // nor the command text
+
+	// Exited and read once: forgotten.
+	_, err = callJob(t, map[string]any{"job": float64(id)})
+	require.ErrorContains(t, err, "no background job")
+}
+
+func TestBash_NohupOutputReachesBuffer(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
 	res, err := executeBash(context.Background(), "nohup sh -c 'sleep 1; echo hi' &", t.TempDir(), 5*time.Second, "")
 	require.NoError(t, err)
-	_, logPath := bgMatch(t, res.Content[0].Text)
-	t.Cleanup(func() { KillBackgroundJobs(); os.Remove(logPath) })
+	id, _ := bgMatch(t, res.Content[0].Text)
+	var got string
 	eventually(t, 5*time.Second, func() bool {
-		b, _ := os.ReadFile(logPath)
-		return strings.Contains(string(b), "hi")
+		text, err := readJob(id)
+		require.NoError(t, err)
+		got += text
+		return strings.Contains(got, "hi")
 	})
 }
 
-func TestBash_PlainCommandNoNoteNoTempFile(t *testing.T) {
-	var created string
-	orig := createOutputFile
-	t.Cleanup(func() { createOutputFile = orig })
-	createOutputFile = func() (*os.File, error) {
-		f, err := orig()
-		if err == nil {
-			created = f.Name()
-		}
-		return f, err
+func TestBash_PlainCommandNoJobNoFdLeak(t *testing.T) {
+	before := fdCount(t)
+	for i := 0; i < 5; i++ {
+		res, err := executeBash(context.Background(), "echo hi", t.TempDir(), 5*time.Second, "")
+		require.NoError(t, err)
+		require.Equal(t, "hi\n", res.Content[0].Text)
 	}
-	res, err := executeBash(context.Background(), "echo hi", t.TempDir(), 5*time.Second, "")
+	require.LessOrEqual(t, fdCount(t), before)
+}
+
+// Foreground output bigger than any pipe buffer must not deadlock.
+func TestBash_LargeForegroundOutput(t *testing.T) {
+	res, err := executeBash(context.Background(), "head -c 3000000 /dev/zero | tr '\\0' a; echo; echo end", t.TempDir(), 20*time.Second, "")
 	require.NoError(t, err)
-	require.NotContains(t, res.Content[0].Text, "background")
-	require.NotEmpty(t, created)
-	_, statErr := os.Stat(created)
-	require.True(t, os.IsNotExist(statErr))
+	require.Contains(t, res.Content[0].Text, "end")
+}
+
+func TestBash_RingBufferKeepsLastMB(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
+	res, err := executeBash(context.Background(), "(sleep 0.3; yes | head -c 5000000; echo; echo tail-marker; sleep 30) &", t.TempDir(), 5*time.Second, "")
+	require.NoError(t, err)
+	id, _ := bgMatch(t, res.Content[0].Text)
+	bgMu.Lock()
+	j := bgJobs[id]
+	bgMu.Unlock()
+	eventually(t, 10*time.Second, func() bool {
+		j.out.mu.Lock()
+		defer j.out.mu.Unlock()
+		return strings.Contains(string(j.out.buf), "tail-marker")
+	})
+	j.out.mu.Lock()
+	n, dropped := len(j.out.buf), j.out.dropped
+	j.out.mu.Unlock()
+	require.LessOrEqual(t, n, MaxJobOutputBytes)
+	require.EqualValues(t, 5000000+len("\ntail-marker\n"), int64(n)+dropped)
+	text, err := readJob(id)
+	require.NoError(t, err)
+	require.Contains(t, text, "earlier bytes dropped")
+	require.Contains(t, text, "tail-marker")
 }
 
 func TestBash_TimeoutKillsGroup(t *testing.T) {
@@ -97,14 +153,63 @@ func TestBash_TimeoutKillsGroup(t *testing.T) {
 	require.True(t, os.IsNotExist(statErr))
 }
 
-func TestKillBackgroundJobs(t *testing.T) {
+func TestBash_KillJob(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
 	res, err := executeBash(context.Background(), "sleep 30 &", t.TempDir(), 5*time.Second, "")
 	require.NoError(t, err)
-	pgid, logPath := bgMatch(t, res.Content[0].Text)
-	t.Cleanup(func() { os.Remove(logPath) })
-	KillBackgroundJobs()
+	id, pgid := bgMatch(t, res.Content[0].Text)
+	text, err := callJob(t, map[string]any{"job": float64(id), "kill": true})
+	require.NoError(t, err)
+	require.Contains(t, text, "exited")
 	a, _ := groupAlive(pgid)
 	require.False(t, a)
+	_, err = callJob(t, map[string]any{"job": float64(id), "kill": true})
+	require.ErrorContains(t, err, "no background job")
+}
+
+func TestBash_ListJobs(t *testing.T) {
+	KillBackgroundJobs()
+	t.Cleanup(KillBackgroundJobs)
+	text, err := callJob(t, map[string]any{"jobs": true})
+	require.NoError(t, err)
+	require.Equal(t, "no background jobs", text)
+	for i := 0; i < 2; i++ {
+		_, err := executeBash(context.Background(), "sleep 30 &", t.TempDir(), 5*time.Second, "")
+		require.NoError(t, err)
+	}
+	text, err = callJob(t, map[string]any{"job": float64(0)})
+	require.NoError(t, err)
+	require.Len(t, strings.Split(text, "\n"), 2)
+	require.Contains(t, text, "running (pids")
+	require.Contains(t, text, "sleep 30 &")
+}
+
+func TestBash_JobParamValidation(t *testing.T) {
+	_, err := callJob(t, map[string]any{})
+	require.ErrorContains(t, err, "command is required")
+	_, err = callJob(t, map[string]any{"command": "echo", "job": float64(1)})
+	require.ErrorContains(t, err, "not both")
+	_, err = callJob(t, map[string]any{"job": float64(99999)})
+	require.ErrorContains(t, err, "no background job")
+	// The prefix wrapper leaves job-only calls alone.
+	tool := NewBashToolWithPrefix(t.TempDir(), "true")
+	_, err = tool.Execute(context.Background(), "id", map[string]any{"command": "", "job": float64(99999)}, nil)
+	require.ErrorContains(t, err, "no background job")
+}
+
+func TestKillBackgroundJobs(t *testing.T) {
+	var pgids []int
+	for i := 0; i < 2; i++ {
+		res, err := executeBash(context.Background(), "sleep 30 &", t.TempDir(), 5*time.Second, "")
+		require.NoError(t, err)
+		_, pgid := bgMatch(t, res.Content[0].Text)
+		pgids = append(pgids, pgid)
+	}
+	KillBackgroundJobs()
+	for _, pgid := range pgids {
+		a, _ := groupAlive(pgid)
+		require.False(t, a)
+	}
 	KillBackgroundJobs() // no-op when empty
 }
 
@@ -115,131 +220,68 @@ func TestKillBackgroundJobs_SigtermIgnored(t *testing.T) {
 	bgKillGrace = 100 * time.Millisecond
 	res, err := executeBash(context.Background(), "sh -c 'trap \"\" TERM; sleep 30' &", t.TempDir(), 5*time.Second, "")
 	require.NoError(t, err)
-	pgid, logPath := bgMatch(t, res.Content[0].Text)
-	t.Cleanup(func() { os.Remove(logPath) })
+	_, pgid := bgMatch(t, res.Content[0].Text)
 	time.Sleep(100 * time.Millisecond) // let trap install
 	KillBackgroundJobs()
 	eventually(t, 2*time.Second, func() bool { a, _ := groupAlive(pgid); return !a })
 }
 
-func TestBackgroundJobs_PrunesDead(t *testing.T) {
-	cmd := []string{"sh", "-c", "exit 0"}
-	p, err := os.StartProcess("/bin/sh", cmd, &os.ProcAttr{Sys: &syscall.SysProcAttr{Setpgid: true}})
-	require.NoError(t, err)
-	_, _ = p.Wait()
-	require.NoError(t, registerBackgroundJob(p.Pid, filepath.Join(t.TempDir(), "x.log")))
-	require.NotContains(t, BackgroundJobs(), p.Pid)
-}
-
-func TestGroupAlive_ProcEdgeCases(t *testing.T) {
-	KillBackgroundJobs() // quiesce monitors before touching globals
-	orig := procDir
-	t.Cleanup(func() { procDir = orig })
-	d := t.TempDir()
-	procDir = d
-	mk := func(name, stat string) {
-		require.NoError(t, os.MkdirAll(filepath.Join(d, name), 0o755))
-		if stat != "" {
-			require.NoError(t, os.WriteFile(filepath.Join(d, name, "stat"), []byte(stat), 0o644))
-		}
-	}
-	mk("self", "")                      // non-numeric
-	mk("10", "")                        // no stat file
-	mk("11", "garbage")                 // no ')'
-	mk("12", "12 (a) S")                // too few fields
-	mk("13", "13 (z) Z 1 77 0")         // zombie
-	mk("14", "14 (x (y)) S 1 77 0")     // match, tricky comm
-	mk("15", "15 (q) S 1 notanumber 0") // bad pgrp
-	alive, pids := groupAlive(77)
-	require.True(t, alive)
-	require.Equal(t, []int{14}, pids)
-	require.Equal(t, "1, 2", joinInts([]int{1, 2}))
-}
-
-// Background job plus truncated output: the note and the full-output path
-// share the same kept file.
-func TestBash_BackgroundWithNonZeroExit(t *testing.T) {
-	res, err := executeBash(context.Background(), "sleep 5 & exit 3", t.TempDir(), 5*time.Second, "")
-	_ = res
-	t.Cleanup(KillBackgroundJobs)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "background: process group")
-	require.Contains(t, err.Error(), "exited with code 3")
-	_, logPath := bgMatch(t, err.Error())
-	os.Remove(logPath)
-}
-
-// useLogRoot points the session log dir at root and resets it around the test.
-func useLogRoot(t *testing.T, root string) {
-	origRoot := tempRoot
-	reset := func() { logDirOnce = sync.Once{}; logDir = ""; logDirErr = nil }
-	reset()
-	tempRoot = func() string { return root }
-	t.Cleanup(func() { tempRoot = origRoot; reset() })
-}
-
-func TestBashLogDir_PerProcessAndStaleCleanup(t *testing.T) {
-	root := t.TempDir()
-	mine := fmt.Sprintf("agent-bash-%d-old", os.Getpid())
-	for _, d := range []string{"agent-bash-999999999-dead", mine, "agent-bash-1-init", "agent-bash-nodash", "agent-bash-abc-x", "other"} {
-		require.NoError(t, os.Mkdir(filepath.Join(root, d), 0o755))
-	}
-	require.NoError(t, os.WriteFile(filepath.Join(root, "agent-bash-999999998-file"), nil, 0o600))
-	useLogRoot(t, root)
-
-	res, err := executeBash(context.Background(), "for i in $(seq 1 2500); do echo l$i; done", t.TempDir(), 10*time.Second, "")
-	require.NoError(t, err)
-	full, _ := res.Details.(map[string]any)["fullOutputPath"].(string)
-	dir, err := BashLogDir()
-	require.NoError(t, err)
-	require.Equal(t, dir, filepath.Dir(full))
-	require.True(t, strings.HasPrefix(filepath.Base(dir), fmt.Sprintf("agent-bash-%d-", os.Getpid())))
-
-	exists := func(n string) bool { _, err := os.Stat(filepath.Join(root, n)); return err == nil }
-	require.False(t, exists("agent-bash-999999999-dead"))
-	for _, n := range []string{mine, "agent-bash-1-init", "agent-bash-nodash", "agent-bash-abc-x", "other", "agent-bash-999999998-file"} {
-		require.True(t, exists(n), n)
-	}
-}
-
-func TestBashLogDir_CreateError(t *testing.T) {
-	useLogRoot(t, filepath.Join(t.TempDir(), "missing"))
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "output file")
-}
-
-func TestBackgroundLogCap(t *testing.T) {
-	KillBackgroundJobs() // quiesce monitors before touching globals
-	origMax, origPoll := MaxBackgroundLogBytes, bgPollInterval
-	t.Cleanup(func() { MaxBackgroundLogBytes, bgPollInterval = origMax, origPoll })
-	MaxBackgroundLogBytes, bgPollInterval = 1000, 10*time.Millisecond
-
+// Closing the read end kills a writer that escaped the group with SIGPIPE.
+func TestBash_ClosedReaderSigpipesEscapedWriter(t *testing.T) {
+	dir := t.TempDir()
 	res, err := executeBash(context.Background(),
-		"(sleep 0.2; head -c 5000 /dev/zero | tr '\\0' a; sleep 0.5; echo tail-marker; sleep 30) &", t.TempDir(), 5*time.Second, "")
+		"setsid sh -c 'echo $$ > P; sleep 0.5; while :; do echo x || exit 9; sleep 0.05; done' &", dir, 5*time.Second, "")
 	require.NoError(t, err)
-	_, logPath := bgMatch(t, res.Content[0].Text)
-	t.Cleanup(KillBackgroundJobs)
-	eventually(t, 15*time.Second, func() bool {
-		b, _ := os.ReadFile(logPath)
-		return strings.HasPrefix(string(b), "[log exceeded") && strings.Contains(string(b), "tail-marker") && len(b) < 1000
+	require.NotContains(t, res.Content[0].Text, "background job") // setsid left the group
+	var pid int
+	eventually(t, 2*time.Second, func() bool {
+		b, _ := os.ReadFile(filepath.Join(dir, "P"))
+		pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		return pid > 0
 	})
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	eventually(t, 5*time.Second, func() bool { return !pidAlive(pid) })
 }
 
-func TestCapLog_EdgeCases(t *testing.T) {
-	KillBackgroundJobs() // quiesce monitors before touching globals
-	orig := MaxBackgroundLogBytes
-	t.Cleanup(func() { MaxBackgroundLogBytes = orig })
-	MaxBackgroundLogBytes = 10
-	capLog(filepath.Join(t.TempDir(), "missing")) // stat error: no-op
-	p := filepath.Join(t.TempDir(), "ro.log")
-	require.NoError(t, os.WriteFile(p, []byte(strings.Repeat("x", 100)), 0o000))
-	capLog(p) // open error: left alone
-	fi, err := os.Stat(p)
-	require.NoError(t, err)
-	if os.Geteuid() != 0 {
-		require.EqualValues(t, 100, fi.Size())
+func pidAlive(pid int) bool {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return syscall.Kill(pid, 0) == nil
 	}
+	s := string(b)
+	f := strings.Fields(s[strings.LastIndexByte(s, ')')+1:])
+	return f[0] != "Z" && f[0] != "X"
+}
+
+// A job whose group is gone but whose pipe is still held elsewhere.
+func TestJobStatus_PipeHeldOutsideGroup(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
+	dir := t.TempDir()
+	res, err := executeBash(context.Background(),
+		"setsid sh -c 'echo $$ > S; exec sleep 30' & sleep 30 &", dir, 5*time.Second, "")
+	require.NoError(t, err)
+	id, pgid := bgMatch(t, res.Content[0].Text)
+	var spid int
+	eventually(t, 2*time.Second, func() bool {
+		b, _ := os.ReadFile(filepath.Join(dir, "S"))
+		spid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		return spid > 0
+	})
+	t.Cleanup(func() { _ = syscall.Kill(spid, syscall.SIGKILL) })
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	eventually(t, 2*time.Second, func() bool { a, _ := groupAlive(pgid); return !a })
+	text, err := readJob(id)
+	require.NoError(t, err)
+	require.Contains(t, text, "outside the group")
+	require.Contains(t, text, "(no new output)")
+}
+
+func TestBash_BackgroundWithNonZeroExit(t *testing.T) {
+	t.Cleanup(KillBackgroundJobs)
+	_, err := executeBash(context.Background(), "sleep 5 & exit 3", t.TempDir(), 5*time.Second, "")
+	require.Error(t, err)
+	bgMatch(t, err.Error())
+	require.Contains(t, err.Error(), "exited with code 3")
 }
 
 func TestBackgroundJobLimit(t *testing.T) {
@@ -254,9 +296,40 @@ func TestBackgroundJobLimit(t *testing.T) {
 	}
 	_, err := executeBash(context.Background(), "echo $$ > P; sleep 30 &", dir, 5*time.Second, "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "background job limit reached: 2 jobs already running")
+	require.Contains(t, err.Error(), "background job limit reached: 2 jobs already running (job ")
 	b, _ := os.ReadFile(filepath.Join(dir, "P"))
 	pgid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
 	eventually(t, 5*time.Second, func() bool { a, _ := groupAlive(pgid); return !a })
 	require.Len(t, BackgroundJobs(), 2)
+}
+
+// Exited, unread jobs beyond the cap are dropped oldest first.
+func TestBackgroundJobs_ExitedEvicted(t *testing.T) {
+	orig := MaxBackgroundJobs
+	t.Cleanup(func() { MaxBackgroundJobs = orig; KillBackgroundJobs() })
+	KillBackgroundJobs()
+	MaxBackgroundJobs = 2
+	var ids []int
+	for i := 0; i < 3; i++ {
+		res, err := executeBash(context.Background(), "sleep 0.3 &", t.TempDir(), 5*time.Second, "")
+		require.NoError(t, err)
+		id, pgid := bgMatch(t, res.Content[0].Text)
+		ids = append(ids, id)
+		eventually(t, 3*time.Second, func() bool { a, _ := groupAlive(pgid); return !a })
+	}
+	bgMu.Lock()
+	_, first := bgJobs[ids[0]]
+	n := len(bgJobs)
+	bgMu.Unlock()
+	require.False(t, first)
+	require.Equal(t, 2, n)
+	require.Empty(t, BackgroundJobs())
+}
+
+func TestExecuteBash_PipeError(t *testing.T) {
+	orig := newOSPipe
+	t.Cleanup(func() { newOSPipe = orig })
+	newOSPipe = func() (*os.File, *os.File, error) { return nil, nil, errors.New("boom") }
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
+	require.ErrorContains(t, err, "output pipe")
 }

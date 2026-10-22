@@ -30,13 +30,6 @@ type BashToolParams struct {
 // It is a var (not const) so tests can shorten it.
 var DefaultBashTimeout = 10 * time.Second
 
-// createOutputFile isolates output-file creation so the (disk-full / EMFILE)
-// failure path can be exercised in tests.
-var createOutputFile = newLogFile
-
-// readOutputFile isolates os.ReadFile for the same reason.
-var readOutputFile = os.ReadFile
-
 // processWait isolates (*os.Process).Wait so its non-ExitError failure path
 // (the wait4 syscall can fail with EINTR/ECHILD) can be exercised in tests.
 var processWait = func(p *os.Process) (*os.ProcessState, error) { return p.Wait() }
@@ -47,7 +40,7 @@ func NewBashTool(cwd string) agent.AgentTool {
 		Tool: ai.Tool{
 			Name: "bash",
 			Description: fmt.Sprintf(
-				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. Background jobs (`&`, `nohup`, `(sleep N; cmd) &`) keep running after the call returns; the result lists their pids and log file — poll it with the `wait` tool. They are killed when the session ends. For a long foreground command, pass a larger `timeout` instead. For viewing file contents, prefer the `read` tool over `cat`/`sed -n`/`head`/`tail` — `read` output is tracked and de-duplicated. For modifying files, prefer `edit`/`write` over `sed -i` / heredoc rewrites. Each result carries a `hash` of the output; the command always executes, but if you pass `if_hash` and the fresh output matches it you get back a tiny `unchanged` stub instead of the full output.",
+				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. Background jobs (`&`, `nohup`, `(sleep N; cmd) &`) keep running after the call returns. The result gives a job id; read its output and status with `job=<id>`, stop it with `job=<id>, kill=true`. Jobs are killed when the session ends. For a long foreground command, pass a larger `timeout` instead. For viewing file contents, prefer the `read` tool over `cat`/`sed -n`/`head`/`tail` — `read` output is tracked and de-duplicated. For modifying files, prefer `edit`/`write` over `sed -i` / heredoc rewrites. Each result carries a `hash` of the output; the command always executes, but if you pass `if_hash` and the fresh output matches it you get back a tiny `unchanged` stub instead of the full output.",
 				runtime.GOOS, runtime.GOARCH, DefaultMaxLines, DefaultMaxBytes/1024,
 			),
 			Parameters: map[string]any{
@@ -55,7 +48,19 @@ func NewBashTool(cwd string) agent.AgentTool {
 				"properties": map[string]any{
 					"command": map[string]any{
 						"type":        "string",
-						"description": "Bash command to execute",
+						"description": "Bash command to execute. Required unless `job` or `jobs` is set.",
+					},
+					"job": map[string]any{
+						"type":        "integer",
+						"description": "Background job id from an earlier result. Without `command`, returns the job's status and the output since the last read. `job=0` lists all jobs.",
+					},
+					"kill": map[string]any{
+						"type":        "boolean",
+						"description": "With `job`, kill that job's process group.",
+					},
+					"jobs": map[string]any{
+						"type":        "boolean",
+						"description": "List all background jobs.",
 					},
 					"timeout": map[string]any{
 						"type":        "number",
@@ -70,14 +75,22 @@ func NewBashTool(cwd string) agent.AgentTool {
 						"description": "Optional. If you already hold this command's output, pass the `hash` from your previous run. The command always re-executes; if the fresh output still matches, you get back a tiny `unchanged` stub instead of the full output.",
 					},
 				},
-				"required": []string{"command"},
 			},
 		},
 		Label: "bash",
 		Execute: func(ctx context.Context, toolCallID string, params map[string]any, onUpdate agent.AgentToolUpdateCallback) (agent.AgentToolResult, error) {
 			command, _ := params["command"].(string)
+			jobF, hasJob := params["job"].(float64)
+			listAll, _ := params["jobs"].(bool)
 			if command == "" {
-				return agent.AgentToolResult{}, fmt.Errorf("command is required")
+				if !hasJob && !listAll {
+					return agent.AgentToolResult{}, fmt.Errorf("command is required")
+				}
+				kill, _ := params["kill"].(bool)
+				return jobTool(int(jobF), listAll, kill)
+			}
+			if hasJob || listAll {
+				return agent.AgentToolResult{}, fmt.Errorf("pass either command or job/jobs, not both")
 			}
 
 			var timeout time.Duration
@@ -112,7 +125,7 @@ func NewBashToolWithPrefix(cwd, commandPrefix string) agent.AgentTool {
 	}
 	orig := t.Execute
 	t.Execute = func(ctx context.Context, toolCallID string, params map[string]any, onUpdate agent.AgentToolUpdateCallback) (agent.AgentToolResult, error) {
-		if cmd, ok := params["command"].(string); ok {
+		if cmd, ok := params["command"].(string); ok && cmd != "" {
 			p := make(map[string]any, len(params))
 			for k, v := range params {
 				p[k] = v
@@ -179,29 +192,22 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	cmd.Env = append(cmd.Env, "GIT_EDITOR=true")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	// Output goes to a temp file, not a pipe: background jobs may keep the fd
-	// open after bash exits, and a file never blocks us waiting for EOF. We
-	// read a snapshot when bash exits; later writes land in the file only.
-	outFile, err := createOutputFile()
+	// stdout+stderr share one pipe. A reader drains it while bash runs.
+	pr, pw, err := newOSPipe()
 	if err != nil {
-		return agent.AgentToolResult{}, fmt.Errorf("output file: %w", err)
+		return agent.AgentToolResult{}, fmt.Errorf("output pipe: %w", err)
 	}
-	logPath := outFile.Name()
-	keepLog := false
-	defer func() {
-		if !keepLog {
-			_ = os.Remove(logPath)
-		}
-	}()
-	cmd.Stdout = outFile
-	cmd.Stderr = outFile
+	cmd.Stdout = pw
+	cmd.Stderr = pw
 
 	if err := cmd.Start(); err != nil {
-		outFile.Close()
+		pr.Close()
+		pw.Close()
 		return agent.AgentToolResult{}, err
 	}
-	// Children hold their own copies of the fd now.
-	outFile.Close()
+	// Children hold their own copies of the write end now.
+	pw.Close()
+	out := newPipeReader(pr)
 	pgid := cmd.Process.Pid
 
 	// Watch ctx for cancellation/timeout; kill the process group if it fires
@@ -219,27 +225,32 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	state, waitErr := processWait(cmd.Process)
 	close(mainExited)
 
-	var bgNote string
 	if ctx.Err() != nil {
 		// Timeout/abort: the whole group goes, including background jobs.
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
-	} else if alive, pids := groupAlive(pgid); alive {
-		if limitErr := registerBackgroundJob(pgid, logPath); limitErr != nil {
+	}
+	// Everything bash wrote is in the pipe now; take it without waiting for
+	// EOF, which background jobs may hold off indefinitely.
+	data := out.drain()
+
+	var bgNote string
+	if alive, pids := groupAlive(pgid); alive && ctx.Err() == nil {
+		job, limitErr := registerBackgroundJob(pgid, pids, command, out)
+		if limitErr != nil {
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			out.close()
 			return agent.AgentToolResult{}, limitErr
 		}
-		keepLog = true
 		pidText := ""
 		if len(pids) > 0 {
 			pidText = fmt.Sprintf(" (pids %s)", joinInts(pids))
 		}
-		bgNote = fmt.Sprintf("[background: process group %d still running%s. Output continues in %s. Capped at %dMB. It is killed when the session ends.]",
-			pgid, pidText, logPath, MaxBackgroundLogBytes>>20)
-	}
-
-	data, readErr := readOutputFile(logPath)
-	if readErr != nil {
-		return agent.AgentToolResult{}, fmt.Errorf("read output: %w", readErr)
+		bgNote = fmt.Sprintf("[background job %d: pgid %d still running%s. Read its output with bash job=%d. Killed when the session ends.]",
+			job.id, pgid, pidText, job.id)
+	} else {
+		// Nothing left in the group. Closing the read end means any writer
+		// that escaped it (setsid) dies of SIGPIPE.
+		out.close()
 	}
 
 	// Synthesise an exec.ExitError on non-zero exit so downstream code keeps
@@ -265,9 +276,11 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	// Handle truncation notice
 	var fullOutputPath string
 	if truncResult.Truncated {
-		// The output file already holds the full output; keep it.
-		keepLog = true
-		fullOutputPath = logPath
+		if f, ferr := os.CreateTemp("", "agent-bash-*.log"); ferr == nil {
+			_, _ = f.WriteString(rawOutput)
+			f.Close()
+			fullOutputPath = f.Name()
+		}
 
 		startLine := truncResult.TotalLines - truncResult.OutputLines + 1
 		endLine := truncResult.TotalLines
@@ -346,4 +359,22 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		Details: details,
 		Meta:    map[string]string{"hash": hash},
 	}, nil
+}
+
+// jobTool handles the job-only forms of the bash tool.
+func jobTool(id int, listAll, kill bool) (agent.AgentToolResult, error) {
+	var text string
+	var err error
+	switch {
+	case listAll || id == 0:
+		text = listJobs()
+	case kill:
+		text, err = killJob(id)
+	default:
+		text, err = readJob(id)
+	}
+	if err != nil {
+		return agent.AgentToolResult{}, err
+	}
+	return agent.AgentToolResult{Content: []ai.ToolResultContent{{Type: "text", Text: text}}}, nil
 }

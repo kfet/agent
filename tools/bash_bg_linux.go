@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // procDir is the procfs root; a var so tests can point it elsewhere.
@@ -40,4 +41,16 @@ func groupAlive(pgid int) (bool, []int) {
 	}
 	sort.Ints(pids)
 	return len(pids) > 0, pids
+}
+
+// fSetPipeSz is F_SETPIPE_SZ (linux/fcntl.h); syscall does not export it.
+const fSetPipeSz = 1031
+
+// setPipeSize grows the pipe to 1MB so bursts do not block writers while the
+// reader catches up. Errors (e.g. over /proc/sys/fs/pipe-max-size) are ignored.
+func setPipeSize(f *os.File) {
+	rc, _ := f.SyscallConn()
+	_ = rc.Control(func(fd uintptr) {
+		_, _, _ = syscall.Syscall(syscall.SYS_FCNTL, fd, fSetPipeSz, 1<<20)
+	})
 }

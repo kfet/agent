@@ -1,97 +1,235 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
 
-// Background job registry: process groups left running by a bash call
-// (`cmd &`, `nohup cmd &`). The host kills them at session end via
-// KillBackgroundJobs.
-var (
-	bgMu   sync.Mutex
-	bgJobs = map[int]*bgJob{}
-	bgWG   sync.WaitGroup // live monitor goroutines
-)
-
-type bgJob struct {
-	logPath string
-	stop    chan struct{}
-}
+// Bash output plumbing and the background job registry.
+//
+// stdout+stderr of every bash call go to one anonymous pipe. A reader
+// goroutine drains it into memory. When bash exits we take whatever the pipe
+// holds (non-blocking reads until EAGAIN) as the call's result. If the
+// process group still has live members, the call registers a job: the read
+// end stays open and the reader keeps the last MaxJobOutputBytes in a ring.
+//
+// At session end the host calls KillBackgroundJobs, which kills every
+// tracked group and closes the read ends. If the host crashes, the kernel
+// closes the read ends for it, and any job that writes afterwards dies of
+// SIGPIPE.
 
 // MaxBackgroundJobs caps how many live background process groups the bash
 // tool tracks at once. A call that would leave one more running fails, and
-// its new group is killed.
+// its new group is killed. Exited jobs whose output has not been read are
+// kept too, up to the same count; the oldest are dropped first.
 var MaxBackgroundJobs = 10
 
-// MaxBackgroundLogBytes caps a background job's log file. When it grows past
-// the cap the file is emptied and restarted with a notice line.
-var MaxBackgroundLogBytes int64 = 50 << 20
+// MaxJobOutputBytes is the size of a background job's output ring buffer.
+var MaxJobOutputBytes = 1 << 20
 
-// bgKillGrace is how long KillBackgroundJobs waits after SIGTERM before
-// sending SIGKILL; bgPollInterval is how often a job's log size and liveness
-// are checked. Vars so tests can shorten them.
+// bgKillGrace is how long a kill waits after SIGTERM before SIGKILL. A var
+// so tests can shorten it.
+var bgKillGrace = 2 * time.Second
+
+// newOSPipe isolates os.Pipe so its failure path (EMFILE) can be tested.
+var newOSPipe = os.Pipe
+
+// pipeReader drains a pipe read end into memory. limit 0 keeps everything;
+// limit > 0 keeps only the last limit bytes.
+type pipeReader struct {
+	r *os.File
+
+	mu       sync.Mutex
+	buf      []byte
+	limit    int
+	dropped  int64
+	eof      bool
+	drainReq bool
+	drained  chan struct{} // closed once a requested drain hit EAGAIN or EOF
+	done     chan struct{} // closed when the goroutine exits
+}
+
+func newPipeReader(r *os.File) *pipeReader {
+	setPipeSize(r)
+	p := &pipeReader{r: r, drained: make(chan struct{}), done: make(chan struct{})}
+	go p.loop()
+	return p
+}
+
+func (p *pipeReader) loop() {
+	defer close(p.done)
+	rc, _ := p.r.SyscallConn() // cannot fail for an open *os.File
+	chunk := make([]byte, 64<<10)
+	for {
+		stop := false
+		err := rc.Read(func(fd uintptr) bool {
+			for {
+				n, rerr := syscall.Read(int(fd), chunk)
+				if n > 0 {
+					p.add(chunk[:n])
+					continue
+				}
+				if rerr == syscall.EAGAIN {
+					p.mu.Lock()
+					if p.drainReq {
+						p.signalDrained()
+					}
+					p.mu.Unlock()
+					return false // wait for more data
+				}
+				stop = true // EOF or a hard error
+				return true
+			}
+		})
+		if stop {
+			p.finish()
+			return
+		}
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			// Woken by requestDrain; clear the deadline and read on.
+			_ = p.r.SetReadDeadline(time.Time{})
+			continue
+		}
+		// The read end was closed.
+		p.finish()
+		return
+	}
+}
+
+func (p *pipeReader) add(b []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.buf = append(p.buf, b...)
+	if p.limit > 0 && len(p.buf) > p.limit {
+		cut := len(p.buf) - p.limit
+		p.dropped += int64(cut)
+		p.buf = append(p.buf[:0], p.buf[cut:]...)
+	}
+}
+
+func (p *pipeReader) finish() {
+	p.mu.Lock()
+	p.eof = true
+	p.signalDrained()
+	p.mu.Unlock()
+}
+
+// signalDrained closes drained once. Caller holds mu.
+func (p *pipeReader) signalDrained() {
+	select {
+	case <-p.drained:
+	default:
+		close(p.drained)
+	}
+}
+
+// drain waits until everything already in the pipe has been read, then
+// returns the buffered output and empties the buffer.
+func (p *pipeReader) drain() []byte {
+	p.mu.Lock()
+	p.drainReq = true
+	p.mu.Unlock()
+	_ = p.r.SetReadDeadline(time.Now()) // wake the reader if it is parked
+	<-p.drained
+	out, _ := p.take()
+	return out
+}
+
+// take returns the buffered output and how many bytes were dropped before
+// it, and empties the buffer.
+func (p *pipeReader) take() ([]byte, int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out, dropped := p.buf, p.dropped
+	p.buf, p.dropped = nil, 0
+	return out, dropped
+}
+
+func (p *pipeReader) atEOF() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.eof
+}
+
+func (p *pipeReader) setLimit(n int) {
+	p.mu.Lock()
+	p.limit = n
+	p.mu.Unlock()
+}
+
+// close closes the read end and waits for the goroutine. Writers that are
+// still alive get SIGPIPE on their next write.
+func (p *pipeReader) close() {
+	_ = p.r.Close()
+	<-p.done
+}
+
+// bgJob is a process group left running by a bash call.
+type bgJob struct {
+	id      int
+	pgid    int
+	pids    []int
+	start   time.Time
+	command string
+	out     *pipeReader
+}
+
 var (
-	bgKillGrace    = 2 * time.Second
-	bgPollInterval = 500 * time.Millisecond
+	bgMu    sync.Mutex
+	bgJobs  = map[int]*bgJob{}
+	bgJobID int
 )
 
-// registerBackgroundJob tracks pgid and starts its log monitor. It fails when
-// MaxBackgroundJobs live jobs are already tracked.
-func registerBackgroundJob(pgid int, logPath string) error {
-	live := BackgroundJobs()
+// registerBackgroundJob tracks a still-running group and keeps reading its
+// output into a ring buffer. It fails when MaxBackgroundJobs live jobs exist.
+func registerBackgroundJob(pgid int, pids []int, command string, out *pipeReader) (*bgJob, error) {
 	bgMu.Lock()
 	defer bgMu.Unlock()
+	var live, exited []*bgJob
+	for _, j := range bgJobs {
+		if alive, _ := groupAlive(j.pgid); alive {
+			live = append(live, j)
+		} else {
+			exited = append(exited, j)
+		}
+	}
 	if len(live) >= MaxBackgroundJobs {
-		return fmt.Errorf("background job limit reached: %d jobs already running (process groups %s). "+
-			"The new background job was killed. Stop one with `kill -- -<pgid>` or wait for it to finish, then retry",
-			len(live), joinInts(live))
+		return nil, fmt.Errorf("background job limit reached: %d jobs already running (%s). "+
+			"The new background job was killed. Stop one with `job=<id>, kill=true` or wait for it to finish, then retry",
+			len(live), jobList(live))
 	}
-	j := &bgJob{logPath: logPath, stop: make(chan struct{})}
-	bgJobs[pgid] = j
-	bgWG.Add(1)
-	go monitorJob(pgid, j)
-	return nil
+	// Drop the oldest exited jobs beyond the cap.
+	sort.Slice(exited, func(a, b int) bool { return exited[a].id < exited[b].id })
+	for len(exited) >= MaxBackgroundJobs {
+		dropJobLocked(exited[0])
+		exited = exited[1:]
+	}
+	out.setLimit(MaxJobOutputBytes)
+	bgJobID++
+	j := &bgJob{id: bgJobID, pgid: pgid, pids: pids, start: time.Now(), command: command, out: out}
+	bgJobs[j.id] = j
+	return j, nil
 }
 
-// monitorJob enforces the log cap until the group exits or is killed.
-func monitorJob(pgid int, j *bgJob) {
-	defer bgWG.Done()
-	t := time.NewTicker(bgPollInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-j.stop:
-			return
-		case <-t.C:
-		}
-		capLog(j.logPath)
-		if alive, _ := groupAlive(pgid); !alive {
-			return
-		}
-	}
+func dropJobLocked(j *bgJob) {
+	delete(bgJobs, j.id)
+	j.out.close()
 }
 
-// capLog empties the log when it exceeds MaxBackgroundLogBytes. The job's
-// fd is O_APPEND, so its next writes land after the notice.
-func capLog(path string) {
-	fi, err := os.Stat(path)
-	if err != nil || fi.Size() <= MaxBackgroundLogBytes {
-		return
+func jobList(js []*bgJob) string {
+	sort.Slice(js, func(a, b int) bool { return js[a].id < js[b].id })
+	s := make([]string, len(js))
+	for i, j := range js {
+		s[i] = fmt.Sprintf("job %d pgid %d", j.id, j.pgid)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0)
-	if err != nil {
-		return
-	}
-	fmt.Fprintf(f, "[log exceeded %dMB; earlier output dropped]\n", MaxBackgroundLogBytes>>20)
-	f.Close()
+	return strings.Join(s, ", ")
 }
 
 // BackgroundJobs returns the process-group ids of tracked background jobs
@@ -100,48 +238,102 @@ func BackgroundJobs() []int {
 	bgMu.Lock()
 	defer bgMu.Unlock()
 	var out []int
-	for pgid, j := range bgJobs {
-		if alive, _ := groupAlive(pgid); alive {
-			out = append(out, pgid)
-		} else {
-			close(j.stop)
-			delete(bgJobs, pgid)
+	for _, j := range bgJobs {
+		if alive, _ := groupAlive(j.pgid); alive {
+			out = append(out, j.pgid)
 		}
 	}
+	sort.Ints(out)
 	return out
 }
 
-// KillBackgroundJobs terminates every background process group started by
-// the bash tool: SIGTERM, a short grace period, then SIGKILL. Hosts call it
-// when the session ends. Safe to call more than once.
-func KillBackgroundJobs() {
+// jobStatus reports a job's state. A job is exited once its group has no
+// live members.
+func jobStatus(j *bgJob) (string, bool) {
+	alive, pids := groupAlive(j.pgid)
+	if alive {
+		s := "running"
+		if len(pids) > 0 {
+			s += " (pids " + joinInts(pids) + ")"
+		}
+		return s, true
+	}
+	if j.out.atEOF() {
+		return "exited", false
+	}
+	return "exited (a process outside the group still holds its output pipe)", false
+}
+
+// readJob returns a job's status and the output produced since the last
+// read. A job that has exited is forgotten once read.
+func readJob(id int) (string, error) {
 	bgMu.Lock()
-	pgids := make([]int, 0, len(bgJobs))
-	for pgid, j := range bgJobs {
-		close(j.stop)
-		pgids = append(pgids, pgid)
+	defer bgMu.Unlock()
+	j, ok := bgJobs[id]
+	if !ok {
+		return "", fmt.Errorf("no background job %d (list jobs with `jobs=true`)", id)
 	}
-	bgJobs = map[int]*bgJob{}
+	status, alive := jobStatus(j)
+	data, dropped := j.out.take()
+	// The command is left out on purpose: agents grep this result for
+	// expected output and would match the command text (see bash-job-ab).
+	text := fmt.Sprintf("[job %d: %s, pgid %d, started %s ago]",
+		j.id, status, j.pgid, time.Since(j.start).Round(time.Second))
+	if dropped > 0 {
+		text += fmt.Sprintf("\n[%d earlier bytes dropped; the buffer keeps the last %dKB]", dropped, MaxJobOutputBytes/1024)
+	}
+	out := TruncateTail(StripAnsi(string(data)), TruncationOptions{}).Content
+	if out == "" {
+		out = "(no new output)"
+	}
+	text += "\n" + out
+	if !alive {
+		dropJobLocked(j)
+	}
+	return text, nil
+}
+
+// killJob kills one job's group, then returns its final status and output.
+func killJob(id int) (string, error) {
+	bgMu.Lock()
+	j, ok := bgJobs[id]
 	bgMu.Unlock()
-	defer bgWG.Wait() // monitors exit on their closed stop channels
-	if len(pgids) == 0 {
-		return
+	if !ok {
+		return "", fmt.Errorf("no background job %d (list jobs with `jobs=true`)", id)
 	}
+	killGroups([]int{j.pgid})
+	return readJob(id)
+}
+
+// listJobs describes every tracked job.
+func listJobs() string {
+	bgMu.Lock()
+	defer bgMu.Unlock()
+	if len(bgJobs) == 0 {
+		return "no background jobs"
+	}
+	ids := make([]int, 0, len(bgJobs))
+	for id := range bgJobs {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	lines := make([]string, len(ids))
+	for i, id := range ids {
+		j := bgJobs[id]
+		status, _ := jobStatus(j)
+		lines[i] = fmt.Sprintf("job %d: %s, pgid %d, started %s ago: %s",
+			j.id, status, j.pgid, time.Since(j.start).Round(time.Second), truncateForLog(j.command, 100))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// killGroups sends SIGTERM, waits up to bgKillGrace, then SIGKILLs.
+func killGroups(pgids []int) {
 	for _, pgid := range pgids {
 		_ = syscall.Kill(-pgid, syscall.SIGTERM)
 	}
 	deadline := time.Now().Add(bgKillGrace)
-	for {
-		anyAlive := false
-		for _, pgid := range pgids {
-			if alive, _ := groupAlive(pgid); alive {
-				anyAlive = true
-				break
-			}
-		}
-		if !anyAlive || time.Now().After(deadline) {
-			break
-		}
+	for time.Now().Before(deadline) && anyAlive(pgids) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	for _, pgid := range pgids {
@@ -149,64 +341,33 @@ func KillBackgroundJobs() {
 	}
 }
 
-// Log directory: one per process (session), named agent-bash-<pid>-*.
-// Creating it first removes dirs left by processes that no longer exist.
-var (
-	logDirOnce sync.Once
-	logDir     string
-	logDirErr  error
-	tempRoot   = os.TempDir
-)
-
-const logDirPrefix = "agent-bash-"
-
-// BashLogDir returns this process's bash log directory, creating it (and
-// cleaning stale ones) on first use.
-func BashLogDir() (string, error) {
-	logDirOnce.Do(func() {
-		root := tempRoot()
-		cleanStaleLogDirs(root)
-		logDir, logDirErr = os.MkdirTemp(root, logDirPrefix+strconv.Itoa(os.Getpid())+"-")
-	})
-	return logDir, logDirErr
-}
-
-// cleanStaleLogDirs removes agent-bash-<pid>-* dirs whose pid is gone.
-func cleanStaleLogDirs(root string) {
-	entries, _ := os.ReadDir(root)
-	for _, e := range entries {
-		name := e.Name()
-		if !e.IsDir() || !strings.HasPrefix(name, logDirPrefix) {
-			continue
+func anyAlive(pgids []int) bool {
+	for _, pgid := range pgids {
+		if alive, _ := groupAlive(pgid); alive {
+			return true
 		}
-		rest := strings.TrimPrefix(name, logDirPrefix)
-		i := strings.IndexByte(rest, '-')
-		if i < 0 {
-			continue
-		}
-		pid, err := strconv.Atoi(rest[:i])
-		if err != nil || pid <= 0 || pidAlive(pid) {
-			continue
-		}
-		_ = os.RemoveAll(filepath.Join(root, name))
 	}
+	return false
 }
 
-func pidAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
-}
-
-var logSeq atomic.Int64
-
-// newLogFile creates an append-mode output file in the session log dir.
-func newLogFile() (*os.File, error) {
-	dir, err := BashLogDir()
-	if err != nil {
-		return nil, err
+// KillBackgroundJobs kills every background process group started by the
+// bash tool, then closes their output pipes. Hosts call it when the session
+// ends. Safe to call more than once.
+func KillBackgroundJobs() {
+	bgMu.Lock()
+	jobs := bgJobs
+	bgJobs = map[int]*bgJob{}
+	bgMu.Unlock()
+	pgids := make([]int, 0, len(jobs))
+	for _, j := range jobs {
+		pgids = append(pgids, j.pgid)
 	}
-	name := filepath.Join(dir, fmt.Sprintf("%d.log", logSeq.Add(1)))
-	return os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_APPEND, 0o600)
+	if len(pgids) > 0 {
+		killGroups(pgids)
+	}
+	for _, j := range jobs {
+		j.out.close()
+	}
 }
 
 func joinInts(xs []int) string {

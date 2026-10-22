@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+### Changed
+
+- bash tool: output goes to an in-memory pipe again, not temp log files. When
+  bash exits, the result is what the pipe holds at that point (non-blocking
+  read, with no wait for EOF and no killpg). The per-process log dir, stale-dir
+  cleanup and log cap are gone (`tools.BashLogDir` and
+  `tools.MaxBackgroundLogBytes` were removed).
+- bash tool: when group members outlive bash, the result names a job id. A
+  reader keeps the last `tools.MaxJobOutputBytes` (1MB) of the job's output.
+  If the host crashes, the kernel closes the read ends, and jobs that write
+  afterwards die of SIGPIPE.
+- Truncated foreground output is written to a temp file only when it is
+  truncated.
+
+### Added
+
+- bash tool params `job` (int), `kill` (bool) and `jobs` (bool). `job=<id>`
+  returns the job's status and the output since the last read. `job=<id>,
+  kill=true` kills its group. `jobs=true` or `job=0` lists all jobs. `command`
+  is required only when none of these is set. An exited job is dropped once
+  it has been read.
+- On Linux the output pipe is grown to 1MB (`F_SETPIPE_SZ`, best effort).
+
 ## [0.3.0] - 2026-10-22
 
 ### Added

@@ -16,28 +16,6 @@ func TestTruncateForLog(t *testing.T) {
 	require.Equal(t, "ab...", truncateForLog("abcdef", 2))
 }
 
-// TestExecuteBash_OutputFileError exercises the temp-file creation failure path.
-func TestExecuteBash_OutputFileError(t *testing.T) {
-	orig := createOutputFile
-	t.Cleanup(func() { createOutputFile = orig })
-	createOutputFile = func() (*os.File, error) { return nil, errors.New("boom") }
-
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "output file")
-}
-
-// TestExecuteBash_ReadOutputError exercises the snapshot read failure path.
-func TestExecuteBash_ReadOutputError(t *testing.T) {
-	orig := readOutputFile
-	t.Cleanup(func() { readOutputFile = orig })
-	readOutputFile = func(string) ([]byte, error) { return nil, errors.New("boom") }
-
-	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "read output")
-}
-
 // TestExecuteBash_StartError forces cmd.Start to fail by removing bash from PATH.
 func TestExecuteBash_StartError(t *testing.T) {
 	t.Setenv("PATH", "")
