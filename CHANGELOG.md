@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
+### Changed
+
+- bash tool: background jobs (`cmd &`, `nohup cmd &`, `(sleep N; cmd) &`) now
+  keep running after the call returns instead of being killed with the
+  process group. Output goes to a temp file instead of a pipe; when group
+  members survive bash, the result lists their pids and the log file (kept,
+  still receiving output). Timeout and abort still kill the whole group.
+
+### Added
+
+- `tools.KillBackgroundJobs()` terminates (SIGTERM, grace, SIGKILL) every
+  background process group left by the bash tool; hosts call it at session
+  end. `tools.BackgroundJobs()` lists the live ones.
+
 ## [0.1.4] - 2026-10-08
 
 ### Added

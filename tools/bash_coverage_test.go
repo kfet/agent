@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"syscall"
 	"testing"
 	"time"
 
@@ -17,15 +16,26 @@ func TestTruncateForLog(t *testing.T) {
 	require.Equal(t, "ab...", truncateForLog("abcdef", 2))
 }
 
-// TestExecuteBash_PipeError exercises the os.Pipe failure path via the seam.
-func TestExecuteBash_PipeError(t *testing.T) {
-	orig := newOSPipe
-	t.Cleanup(func() { newOSPipe = orig })
-	newOSPipe = func() (*os.File, *os.File, error) { return nil, nil, errors.New("boom") }
+// TestExecuteBash_OutputFileError exercises the temp-file creation failure path.
+func TestExecuteBash_OutputFileError(t *testing.T) {
+	orig := createOutputFile
+	t.Cleanup(func() { createOutputFile = orig })
+	createOutputFile = func() (*os.File, error) { return nil, errors.New("boom") }
 
 	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "pipe")
+	require.Contains(t, err.Error(), "output file")
+}
+
+// TestExecuteBash_ReadOutputError exercises the snapshot read failure path.
+func TestExecuteBash_ReadOutputError(t *testing.T) {
+	orig := readOutputFile
+	t.Cleanup(func() { readOutputFile = orig })
+	readOutputFile = func(string) ([]byte, error) { return nil, errors.New("boom") }
+
+	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read output")
 }
 
 // TestExecuteBash_StartError forces cmd.Start to fail by removing bash from PATH.
@@ -33,43 +43,6 @@ func TestExecuteBash_StartError(t *testing.T) {
 	t.Setenv("PATH", "")
 	_, err := executeBash(context.Background(), "echo hi", t.TempDir(), time.Second, "")
 	require.Error(t, err)
-}
-
-// TestExecuteBash_DrainGraceFallback drives the drain-race fallback
-// deterministically: the newOSPipe seam keeps an extra dup of the write end
-// open, so io.Copy never sees EOF (mimicking a descendant that holds the pipe
-// open past killpg). The drain therefore cannot finish within drainGracePeriod
-// and the real force-close path runs.
-func TestExecuteBash_DrainGraceFallback(t *testing.T) {
-	origPipe := newOSPipe
-	origGrace := drainGracePeriod
-	t.Cleanup(func() { newOSPipe = origPipe; drainGracePeriod = origGrace })
-	drainGracePeriod = 5 * time.Millisecond
-
-	var extraWriteEnd *os.File
-	t.Cleanup(func() {
-		if extraWriteEnd != nil {
-			_ = extraWriteEnd.Close()
-		}
-	})
-	newOSPipe = func() (*os.File, *os.File, error) {
-		pr, pw, err := os.Pipe()
-		if err != nil {
-			return nil, nil, err
-		}
-		// Dup the write end and hold it open: io.Copy on the read end won't
-		// hit EOF until every write end closes, so the drain blocks past
-		// drainGracePeriod and the fallback pr.Close() fires.
-		fd, dupErr := syscall.Dup(int(pw.Fd()))
-		if dupErr == nil {
-			extraWriteEnd = os.NewFile(uintptr(fd), "extra-write-end")
-		}
-		return pr, pw, nil
-	}
-
-	res, err := executeBash(context.Background(), "echo foreground", t.TempDir(), 5*time.Second, "")
-	require.NoError(t, err)
-	require.Contains(t, res.Content[0].Text, "foreground")
 }
 
 // TestExecuteBash_GenericWaitError exercises the fall-through error path where

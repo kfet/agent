@@ -229,6 +229,7 @@ func TestBashTool_AbortWithChildren(t *testing.T) {
 // `sleep` finishes (~30s), even though bash itself exited immediately.
 func TestBashTool_BackgroundChildHoldsPipe(t *testing.T) {
 	t.Parallel()
+	t.Cleanup(KillBackgroundJobs)
 	tool := NewBashTool(t.TempDir())
 
 	start := time.Now()

@@ -4,11 +4,9 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -32,20 +30,16 @@ type BashToolParams struct {
 // It is a var (not const) so tests can shorten it.
 var DefaultBashTimeout = 10 * time.Second
 
-// newOSPipe isolates the os.Pipe dependency so the (real, fd-exhaustion)
-// failure path can be exercised in tests. os.Pipe fails under EMFILE/ENFILE.
-var newOSPipe = os.Pipe
+// createOutputFile isolates os.CreateTemp so the (disk-full / EMFILE)
+// failure path can be exercised in tests.
+var createOutputFile = func() (*os.File, error) { return os.CreateTemp("", "agent-bash-*.log") }
+
+// readOutputFile isolates os.ReadFile for the same reason.
+var readOutputFile = os.ReadFile
 
 // processWait isolates (*os.Process).Wait so its non-ExitError failure path
 // (the wait4 syscall can fail with EINTR/ECHILD) can be exercised in tests.
 var processWait = func(p *os.Process) (*os.ProcessState, error) { return p.Wait() }
-
-// drainGracePeriod bounds how long we wait for the output drain to finish
-// after killing the process group before force-closing the read end. Exposed
-// as a var so tests can shrink it to deterministically drive the macOS
-// kernel-race fallback (a backgrounded descendant holding the pipe open past
-// killpg). See the fallback select in executeBash.
-var drainGracePeriod = 50 * time.Millisecond
 
 // NewBashTool creates the bash tool for the given working directory.
 func NewBashTool(cwd string) agent.AgentTool {
@@ -53,7 +47,7 @@ func NewBashTool(cwd string) agent.AgentTool {
 		Tool: ai.Tool{
 			Name: "bash",
 			Description: fmt.Sprintf(
-				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. When the foreground command exits the tool kills its whole process group, so it returns promptly instead of waiting on the inherited pipe. `setsid` starts a new process group; it does not start a new cgroup. For viewing file contents, prefer the `read` tool over `cat`/`sed -n`/`head`/`tail` — `read` output is tracked and de-duplicated. For modifying files, prefer `edit`/`write` over `sed -i` / heredoc rewrites. Each result carries a `hash` of the output; the command always executes, but if you pass `if_hash` and the fresh output matches it you get back a tiny `unchanged` stub instead of the full output.",
+				"Execute a bash command in the current working directory (%s/%s). Returns stdout and stderr. Output is truncated to last %d lines or %dKB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds (default 10s if omitted; pass an explicit value to override up or down). Optionally provide `cwd` to run in a specific directory instead of the session's working directory (absolute path, or relative to the session directory); use this to recover if the session's working directory was deleted. Background jobs (`&`, `nohup`, `(sleep N; cmd) &`) keep running after the call returns; the result lists their pids and log file — poll it with the `wait` tool. They are killed when the session ends. For a long foreground command, pass a larger `timeout` instead. For viewing file contents, prefer the `read` tool over `cat`/`sed -n`/`head`/`tail` — `read` output is tracked and de-duplicated. For modifying files, prefer `edit`/`write` over `sed -i` / heredoc rewrites. Each result carries a `hash` of the output; the command always executes, but if you pass `if_hash` and the fresh output matches it you get back a tiny `unchanged` stub instead of the full output.",
 				runtime.GOOS, runtime.GOARCH, DefaultMaxLines, DefaultMaxBytes/1024,
 			),
 			Parameters: map[string]any{
@@ -176,46 +170,39 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		defer cancel()
 	}
 
-	// Create command. We deliberately do NOT use exec.CommandContext: we need
-	// to manage the process lifecycle ourselves so we can kill the entire
-	// process group as soon as the foreground bash process exits, reaping any
-	// backgrounded children that would otherwise hold the stdout pipe open
-	// (e.g. `(sleep 30; echo done) &`). Daemons that detach via setsid (tmux
-	// server, sshd, etc.) escape the group and survive — that is the whole
-	// point of setsid.
+	// Create command. We deliberately do NOT use exec.CommandContext: we
+	// manage the process group ourselves so timeout/abort kill every member,
+	// while a normal exit leaves backgrounded jobs (`cmd &`) running.
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Dir = cwd
 	cmd.Env = AppendColorEnv(os.Environ())
 	cmd.Env = append(cmd.Env, "GIT_EDITOR=true")
-
-	// Run bash in its own process group so we can kill the entire group on
-	// exit/cancellation.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	// Use our own pipe for stdout/stderr so we can drain it after killpg.
-	pr, pw, err := newOSPipe()
+	// Output goes to a temp file, not a pipe: background jobs may keep the fd
+	// open after bash exits, and a file never blocks us waiting for EOF. We
+	// read a snapshot when bash exits; later writes land in the file only.
+	outFile, err := createOutputFile()
 	if err != nil {
-		return agent.AgentToolResult{}, fmt.Errorf("pipe: %w", err)
+		return agent.AgentToolResult{}, fmt.Errorf("output file: %w", err)
 	}
-	cmd.Stdout = pw
-	cmd.Stderr = pw
+	logPath := outFile.Name()
+	keepLog := false
+	defer func() {
+		if !keepLog {
+			_ = os.Remove(logPath)
+		}
+	}()
+	cmd.Stdout = outFile
+	cmd.Stderr = outFile
 
 	if err := cmd.Start(); err != nil {
-		pr.Close()
-		pw.Close()
+		outFile.Close()
 		return agent.AgentToolResult{}, err
 	}
-	// Close the parent's copy of the write end; only children hold it now.
-	pw.Close()
-
-	// Drain pipe into buffer.
-	var buf bytes.Buffer
-	drained := make(chan struct{})
-	go func() {
-		_, _ = io.Copy(&buf, pr)
-		pr.Close()
-		close(drained)
-	}()
+	// Children hold their own copies of the fd now.
+	outFile.Close()
+	pgid := cmd.Process.Pid
 
 	// Watch ctx for cancellation/timeout; kill the process group if it fires
 	// before bash exits naturally.
@@ -223,7 +210,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		case <-mainExited:
 		}
 	}()
@@ -232,26 +219,24 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	state, waitErr := processWait(cmd.Process)
 	close(mainExited)
 
-	// Reap any orphaned children still in the group (backgrounded `&` jobs
-	// that inherit the pipe; without this they would block the drain
-	// indefinitely). ESRCH is expected when no group members remain.
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	var bgNote string
+	if ctx.Err() != nil {
+		// Timeout/abort: the whole group goes, including background jobs.
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	} else if alive, pids := groupAlive(pgid); alive {
+		registerBackgroundJob(pgid)
+		keepLog = true
+		pidText := ""
+		if len(pids) > 0 {
+			pidText = fmt.Sprintf(" (pids %s)", joinInts(pids))
+		}
+		bgNote = fmt.Sprintf("[background: process group %d still running%s. Output continues in %s. It is killed when the session ends.]",
+			pgid, pidText, logPath)
+	}
 
-	// Wait for the drain to finish naturally. Bash flushed and exited before
-	// Wait returned, and after killpg above all group members are gone, so
-	// io.Copy should hit EOF promptly. If a just-forked descendant of a
-	// backgrounded subshell still briefly holds the write end past our
-	// killpg (a kernel race observed on macOS where killpg returns success
-	// but the pipe stays open), fall back to force-closing pr after a short
-	// grace period. We must NOT close pr eagerly: under Linux + race
-	// detector the close can win the race against the drain's first Read,
-	// truncating the output to empty. Tail output from such held-open
-	// descendants may still be discarded — that is the documented trade-off.
-	select {
-	case <-drained:
-	case <-time.After(drainGracePeriod):
-		_ = pr.Close()
-		<-drained
+	data, readErr := readOutputFile(logPath)
+	if readErr != nil {
+		return agent.AgentToolResult{}, fmt.Errorf("read output: %w", readErr)
 	}
 
 	// Synthesise an exec.ExitError on non-zero exit so downstream code keeps
@@ -261,7 +246,7 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 		err = &exec.ExitError{ProcessState: state}
 	}
 
-	output := buf.String()
+	output := string(data)
 
 	// Keep raw output (with ANSI) for display, strip for LLM context
 	rawOutput := output
@@ -277,13 +262,9 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 	// Handle truncation notice
 	var fullOutputPath string
 	if truncResult.Truncated {
-		// Write full output to temp file
-		tmpFile, tmpErr := os.CreateTemp("", "agent-bash-*.log")
-		if tmpErr == nil {
-			tmpFile.WriteString(output)
-			tmpFile.Close()
-			fullOutputPath = tmpFile.Name()
-		}
+		// The output file already holds the full output; keep it.
+		keepLog = true
+		fullOutputPath = logPath
 
 		startLine := truncResult.TotalLines - truncResult.OutputLines + 1
 		endLine := truncResult.TotalLines
@@ -295,6 +276,10 @@ func executeBash(ctx context.Context, command, cwd string, timeout time.Duration
 			outputText += fmt.Sprintf("\n\n[Showing lines %d-%d of %d (%dKB limit). Full output: %s]",
 				startLine, endLine, truncResult.TotalLines, DefaultMaxBytes/1024, fullOutputPath)
 		}
+	}
+
+	if bgNote != "" {
+		outputText += "\n\n" + bgNote
 	}
 
 	if err != nil {
