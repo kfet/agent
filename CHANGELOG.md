@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-26
+
+### Added
+
+- `Agent.AppendContext(msg)`: appends a context message when idle; during a run it queues it under the run lock and the loop delivers it after the next tool results (no extra turn), or at agent_end. Queued messages emit message_start/message_end exactly once. `Agent.PeekContextQueue()` and `AgentLoopConfig.GetContextMessages` back it.
+
 ## [0.5.2] - 2026-10-22
 
 ### Changed

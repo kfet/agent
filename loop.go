@@ -376,6 +376,18 @@ func runLoop(
 				}
 			}
 
+			// The loop requests again only when tools ran: deliver queued
+			// context now, after the tool results, without adding a turn.
+			if hasMoreToolCalls && config.GetContextMessages != nil {
+				for _, m := range config.GetContextMessages() {
+					m := m
+					events <- AgentEvent{Type: EventMessageStart, Message: &m}
+					events <- AgentEvent{Type: EventMessageEnd, Message: &m}
+					currentCtx.Messages = append(currentCtx.Messages, m)
+					newMessages = append(newMessages, m)
+				}
+			}
+
 			// Get steering messages after turn completes
 			if config.GetSteeringMessages != nil {
 				var err error

@@ -51,6 +51,13 @@ type AgentLoopConfig struct {
 	// producing a normal event sequence.
 	ShouldStopAfterTurn func(ctx ShouldStopAfterTurnContext) bool
 
+	// GetContextMessages returns context messages to add before the next
+	// request. Called only after a turn's tool calls have executed and the
+	// loop is about to request again; the messages are appended after the
+	// tool results. Unlike steering, a non-empty result never causes an
+	// extra turn. Messages not taken by the loop stay with the caller.
+	GetContextMessages func() []AgentMessage
+
 	// GetFollowUpMessages returns follow-up messages after the agent would otherwise stop.
 	GetFollowUpMessages func() ([]AgentMessage, error)
 

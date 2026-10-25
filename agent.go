@@ -129,6 +129,7 @@ type Agent struct {
 	transformCtx    func(context.Context, []AgentMessage) ([]AgentMessage, error)
 	steeringQueue   []AgentMessage
 	followUpQueue   []AgentMessage
+	contextQueue    []AgentMessage // see AppendContext
 	steeringMode    string
 	followUpMode    string
 	streamFn        StreamFn
@@ -464,6 +465,47 @@ func (a *Agent) ClearMessages() {
 	a.state.Messages = nil
 }
 
+// AppendContext adds a context message (e.g. host-injected instructions) to
+// the conversation without starting or extending a run. When the agent is
+// idle the message is appended to history at once and AppendContext returns
+// false. When a run is in progress it is queued and AppendContext returns
+// true: the loop delivers it right before its next request after tool calls
+// (never adding a turn of its own), or, when the run ends without another
+// request, appends it at agent_end. Either way a queued message is announced
+// by message_start/message_end events, so listeners that persist on
+// message_end see it exactly once. The streaming check and the enqueue share
+// the lock that ends the run, so a message can never fall between the two.
+func (a *Agent) AppendContext(m AgentMessage) (queued bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.state.IsStreaming {
+		a.state.Messages = append(a.state.Messages, m)
+		return false
+	}
+	a.contextQueue = append(a.contextQueue, m)
+	return true
+}
+
+// PeekContextQueue returns a snapshot of context messages queued by
+// AppendContext and not yet delivered.
+func (a *Agent) PeekContextQueue() []AgentMessage {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]AgentMessage(nil), a.contextQueue...)
+}
+
+func (a *Agent) dequeueContextMessages() []AgentMessage {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.takeContextLocked()
+}
+
+func (a *Agent) takeContextLocked() []AgentMessage {
+	q := a.contextQueue
+	a.contextQueue = nil
+	return q
+}
+
 // Steer queues a steering message to interrupt the agent mid-run.
 func (a *Agent) Steer(m AgentMessage) {
 	a.mu.Lock()
@@ -612,6 +654,7 @@ func (a *Agent) Reset() {
 	a.state.Error = ""
 	a.steeringQueue = nil
 	a.followUpQueue = nil
+	a.contextQueue = nil
 }
 
 // Prompt sends a text prompt to the agent.
@@ -1098,6 +1141,7 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 		GetFollowUpMessages: func() ([]AgentMessage, error) {
 			return a.dequeueFollowUpMessages(), nil
 		},
+		GetContextMessages: a.dequeueContextMessages,
 	}
 
 	a.mu.Unlock()
@@ -1106,11 +1150,16 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 		defer func() {
 			cancel()
 			a.mu.Lock()
+			// Normally agent_end already flushed the context queue; this
+			// covers a loop that ended without one.
+			late := a.takeContextLocked()
+			a.state.Messages = append(a.state.Messages, late...)
 			a.state.IsStreaming = false
 			a.state.StreamMessage = nil
 			a.state.PendingToolCalls = make(map[string]bool)
 			a.abortCancel = nil
 			a.mu.Unlock()
+			a.emitContextMessages(late)
 			close(idleCh)
 		}()
 
@@ -1126,6 +1175,7 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 		}()
 
 		var partial *AgentMessage
+		var flushed []AgentMessage
 
 		for event := range events {
 			a.mu.Lock()
@@ -1168,8 +1218,16 @@ func (a *Agent) runLoop(messages []AgentMessage, skipInitialSteeringPoll bool) {
 			case EventAgentEnd:
 				a.state.IsStreaming = false
 				a.state.StreamMessage = nil
+				// Context that arrived after the loop's last request: append
+				// it now, under the same lock that ends streaming, so a
+				// concurrent AppendContext either lands here or sees idle.
+				flushed = a.takeContextLocked()
+				a.state.Messages = append(a.state.Messages, flushed...)
 			}
 			a.mu.Unlock()
+
+			a.emitContextMessages(flushed)
+			flushed = nil
 
 			// Emit to listeners outside the lock
 			a.emit(event)
@@ -1207,6 +1265,15 @@ func assistantMessageHasContent(am *ai.AssistantMessage) bool {
 		}
 	}
 	return false
+}
+
+// emitContextMessages announces context messages that were appended to
+// history outside the loop (see AppendContext).
+func (a *Agent) emitContextMessages(msgs []AgentMessage) {
+	for i := range msgs {
+		a.emit(AgentEvent{Type: EventMessageStart, Message: &msgs[i]})
+		a.emit(AgentEvent{Type: EventMessageEnd, Message: &msgs[i]})
+	}
 }
 
 func (a *Agent) emit(e AgentEvent) {
