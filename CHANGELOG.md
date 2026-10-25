@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-26
+
+### Fixed
+
+- Context queued by `AppendContext` is also delivered before a request driven by a steer or follow-up, not only after tool calls.
+
 ## [0.6.0] - 2026-10-26
 
 ### Added

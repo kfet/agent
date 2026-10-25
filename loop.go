@@ -376,18 +376,6 @@ func runLoop(
 				}
 			}
 
-			// The loop requests again only when tools ran: deliver queued
-			// context now, after the tool results, without adding a turn.
-			if hasMoreToolCalls && config.GetContextMessages != nil {
-				for _, m := range config.GetContextMessages() {
-					m := m
-					events <- AgentEvent{Type: EventMessageStart, Message: &m}
-					events <- AgentEvent{Type: EventMessageEnd, Message: &m}
-					currentCtx.Messages = append(currentCtx.Messages, m)
-					newMessages = append(newMessages, m)
-				}
-			}
-
 			// Get steering messages after turn completes
 			if config.GetSteeringMessages != nil {
 				var err error
@@ -396,10 +384,17 @@ func runLoop(
 					pendingMessages = nil
 				}
 			}
+
+			// The loop requests again when tools ran or steering arrived:
+			// deliver queued context now, without adding a turn.
+			if hasMoreToolCalls || len(pendingMessages) > 0 {
+				newMessages = deliverContext(config, currentCtx, newMessages, events)
+			}
 		}
 
 		// Agent would stop. Check for follow-up messages.
 		if followUp := drainFollowUps(config); len(followUp) > 0 {
+			newMessages = deliverContext(config, currentCtx, newMessages, events)
 			pendingMessages = followUp
 			continue
 		}
@@ -488,6 +483,22 @@ func dropTrailingPartial(agentCtx *AgentContext) {
 	if a := agentCtx.Messages[n-1].Message.AsAssistant(); hasIncompleteToolCall(a) {
 		agentCtx.Messages = agentCtx.Messages[:n-1]
 	}
+}
+
+// deliverContext appends the messages from config.GetContextMessages to the
+// context ahead of the next request, announcing each one.
+func deliverContext(config *AgentLoopConfig, currentCtx *AgentContext, newMessages []AgentMessage, events chan<- AgentEvent) []AgentMessage {
+	if config.GetContextMessages == nil {
+		return newMessages
+	}
+	for _, m := range config.GetContextMessages() {
+		m := m
+		events <- AgentEvent{Type: EventMessageStart, Message: &m}
+		events <- AgentEvent{Type: EventMessageEnd, Message: &m}
+		currentCtx.Messages = append(currentCtx.Messages, m)
+		newMessages = append(newMessages, m)
+	}
+	return newMessages
 }
 
 // drainFollowUps returns any follow-up messages queued via

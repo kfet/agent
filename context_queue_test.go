@@ -166,3 +166,35 @@ func msgText(m AgentMessage) string {
 	}
 	return m.Text()
 }
+
+// A steer or follow-up that drives another request takes queued context with
+// it, ahead of the steer/follow-up itself.
+func TestAppendContext_DeliveredBeforeSteerAndFollowUp(t *testing.T) {
+	for _, kind := range []string{"steer", "followup"} {
+		t.Run(kind, func(t *testing.T) {
+			rec := &requestRecorder{}
+			var a *Agent
+			first := true
+			a = NewAgent(AgentOptions{
+				Model:    testModel(),
+				StreamFn: mockStreamFn(simpleResponse("one"), simpleResponse("two")),
+				TransformContext: func(ctx context.Context, msgs []AgentMessage) ([]AgentMessage, error) {
+					if first { // runs inside the loop, while the first request is built
+						first = false
+						assert.True(t, a.AppendContext(ctxMsg("CTX")))
+						if kind == "steer" {
+							a.Steer(ctxMsg("NEXT"))
+						} else {
+							a.FollowUp(ctxMsg("NEXT"))
+						}
+					}
+					return rec.transform(ctx, msgs)
+				},
+			})
+			require.NoError(t, a.Prompt("go"))
+			a.WaitForIdle()
+			require.Len(t, rec.requests, 2)
+			assert.Equal(t, []string{"user:go", "assistant:one", "user:CTX", "user:NEXT"}, rec.requests[1])
+		})
+	}
+}
